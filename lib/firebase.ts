@@ -34,26 +34,16 @@ import {
 
 // --- Environment Variables for Firebase Config (Recommended) ---
 // Ensure these are set in your .env.local file
-// const firebaseConfig = {
-//     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY, // Access prefixed variable
-//     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-//     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-//     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-//     messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-//     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-//     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
-// };
-
-
 const firebaseConfig = {
-    apiKey: "AIzaSyAsFtTuzBJ4mHfWWIO825x8tKBnOLzTY0U",
-    authDomain: "zenith-25.firebaseapp.com",
-    projectId: "zenith-25",
-    storageBucket: "zenith-25.firebasestorage.app",
-    messagingSenderId: "958240095678",
-    appId: "1:958240095678:web:b3a6f2d6a08cd7e7948def",
-    measurementId: "G-Q0MGCZGHR6"
-  };
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY, // Access prefixed variable
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+};
+
 
 
 // --- Initialize Firebase App (Singleton Pattern) ---
