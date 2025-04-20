@@ -8,7 +8,6 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Zenith - Student Result Management System",
   description: "Effortlessly manage and access student results with Zenith",
-    generator: 'v0.dev'
 }
 
 export default function RootLayout({
