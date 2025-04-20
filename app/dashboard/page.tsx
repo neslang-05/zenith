@@ -99,7 +99,6 @@ const DashboardPage = () => {
                     alt="Zenith Logo"
                     className="h-10 w-auto"
                 />
-                <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600 hidden sm:block">
