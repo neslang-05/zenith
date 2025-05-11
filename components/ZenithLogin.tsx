@@ -202,7 +202,7 @@ const ZenithLogin = () => {
            {/* ... (Divider, MTU ID Login Form, Registration Link) ... */}
             <div className="flex items-center my-6"> <div className="flex-grow border-t border-gray-300"></div> <span className="mx-4 text-gray-500 text-sm">OR</span> <div className="flex-grow border-t border-gray-300"></div> </div>
             <form onSubmit={handleMtuIdLogin} className="space-y-4"> {/* ... MTU ID Input ... */} <div className="mb-4"> <label htmlFor="mtuId" className="block text-gray-700 text-lg font-medium mb-2"> Sign In with MTU ID </label> <div className="relative"> <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"> <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"> <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clipRule="evenodd" /> </svg> </div> <input id="mtuId" type="text" placeholder="Enter your University Registration No." className="w-full pl-10 p-3 border border-gray-300 rounded-md text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500" /> </div> </div> <button type="submit" className="w-full bg-red-900 text-white py-3 rounded-md font-medium hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-700 transition-colors"> Sign In with MTU ID </button> </form>
-            <div className="text-center mt-6"> <p className="text-sm text-gray-600"> Don't have an account? <a href="/sign-up" className="text-indigo-600 hover:text-indigo-800 font-medium ml-1"> Register Admin Account </a> </p> </div>
+            <div className="text-center mt-6"> <p className="text-sm text-gray-600"> Don't have an account? <a href="/signup" className="text-indigo-600 hover:text-indigo-800 font-medium ml-1"> Register Admin Account </a> </p> </div>
 
 
         </div>
@@ -212,7 +212,7 @@ const ZenithLogin = () => {
         </div>
       </div>
       {/* Footer */}
-      <footer className="w-full text-center p-4 text-gray-500 text-sm mt-auto"> Developed by Synergy Systems for Manipur Technical University<br/> Copyright © 2025 </footer>
+      <footer className="w-full text-center p-4 text-gray-500 text-sm mt-auto"> Developed by Synergy Systems <br/> Copyright © 2025 </footer>
 
       {/* Password Reset Modal (Keep as is) */}
       {showResetModal && (

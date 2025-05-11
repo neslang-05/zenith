@@ -4,61 +4,56 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    /* Light Theme Variables using your palette */
+    --background: 0 0% 100%; /* White */
+    --foreground: 203 100% 16%; /* Prussian Blue for general text */
+
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 203 100% 16%; /* Prussian Blue */
+
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 203 100% 16%; /* Prussian Blue */
+
+    --primary: 206 100% 49%; /* Picton Blue */
+    --primary-foreground: 0 0% 100%; /* White text on Picton Blue */
+
+    --secondary: 204 94% 40%; /* Steel Blue */
+    --secondary-foreground: 0 0% 100%; /* White text on Steel Blue */
+
+    --muted: 200 100% 29%; /* Lapis Lazuli - can be used for muted backgrounds or text */
+    --muted-foreground: 0 0% 90%; /* Lighter text on Lapis Lazuli if used as BG, or Lapis Lazuli itself if on white BG */
+    /* If Lapis Lazuli is for text on white: --muted-foreground: 200 100% 29%; */
+
+
+    --accent: 206 100% 49%; /* Picton Blue (can be same as primary or different) */
+    --accent-foreground: 0 0% 100%; /* White */
+
+    --destructive: 0 84.2% 60.2%; /* Standard Red for errors */
+    --destructive-foreground: 0 0% 100%; /* White */
+
+    --border: 0 0% 89.8%; /* Light gray for borders (e.g., hsl(214.3 31.8% 91.4%)) */
+    --input: 0 0% 89.8%; /* Light gray for inputs */
+    --ring: 206 100% 49%; /* Picton Blue for focus rings */
+
+    --radius: 0.5rem; /* Default border radius */
+
+    /* You can also define your direct color names as CSS variables if you want to use them that way */
+    /* --zenith-picton-blue-hsl: 206 100% 49%; */
+    /* --zenith-rich-black-hsl: 203 61% 8%; */
   }
 
+  /* No .dark class for now as you requested light theme only */
+  /*
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-  }
-}
+    --background: 203 61% 8%; // Rich Black for dark BG
+    --foreground: 0 0% 90%;   // Light gray/white text
 
-@layer base {
-  * {
-    @apply border-border;
+    // ... other dark mode variables ...
   }
+  */
+
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1; /* Optional: for better font rendering */
   }
 }
-
-html {
-  scroll-behavior: smooth;
-}
-

@@ -32,8 +32,8 @@ import {
     orderBy // Optional for sorting
 } from 'firebase/firestore';
 
-// --- Environment Variables for Firebase Config (Recommended) ---
-// Ensure these are set in your .env.local file
+//--- Environment Variables for Firebase Config (Recommended) ---
+// 
 const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY, // Access prefixed variable
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -43,6 +43,7 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
+
 
 
 
