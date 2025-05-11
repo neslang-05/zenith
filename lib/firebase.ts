@@ -32,6 +32,7 @@ import {
     orderBy // Optional for sorting
 } from 'firebase/firestore';
 
+<<<<<<< HEAD
 // --- Environment Variables for Firebase Config (Recommended) ---
 // Ensure these are set in your .env.local file
 //const firebaseConfig = {
@@ -43,6 +44,10 @@ import {
 //     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 //     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 // };
+=======
+//--- Environment Variables for Firebase Config (Recommended) ---
+// 
+>>>>>>> refs/remotes/origin/master
 const firebaseConfig = {
     apiKey: "AIzaSyAsFtTuzBJ4mHfWWIO825x8tKBnOLzTY0U",
     authDomain: "zenith-25.firebaseapp.com",
@@ -52,6 +57,7 @@ const firebaseConfig = {
     appId: "1:958240095678:web:b3a6f2d6a08cd7e7948def",
     measurementId: "G-Q0MGCZGHR6"
   };
+
 
 
 // --- Initialize Firebase App (Singleton Pattern) ---
