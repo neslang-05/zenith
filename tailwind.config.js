@@ -1,13 +1,15 @@
+// tailwind.config.js or tailwind.config.ts
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: ["class"],
+  darkMode: ["class"], // Or 'media' if you prefer OS-based dark mode
   content: [
-    "./pages/**/*.{ts,tsx}",
-    "./components/**/*.{ts,tsx}",
-    "./app/**/*.{ts,tsx}",
-    "./src/**/*.{ts,tsx}",
-    "*.{js,ts,jsx,tsx,mdx}",
+    './pages/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}',
+    './app/**/*.{ts,tsx}',
+    './src/**/*.{ts,tsx}',
   ],
+  prefix: "", // You can add a prefix if needed, e.g., "tw-"
   theme: {
     container: {
       center: true,
@@ -18,6 +20,14 @@ module.exports = {
     },
     extend: {
       colors: {
+        // Your specific brand colors
+        'zenith-picton-blue': '#00A6FB',
+        'zenith-steel-blue': '#0582CA',
+        'zenith-lapis-lazuli': '#006494',
+        'zenith-prussian-blue': '#003554',
+        'zenith-rich-black': '#051923',
+
+        // Semantic mapping (light theme)
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -57,22 +67,21 @@ module.exports = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
-      keyframes: {
+      keyframes: { // Example, if you use shadcn/ui or similar animations
         "accordion-down": {
-          from: { height: 0 },
+          from: { height: "0" },
           to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
           from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: 0 },
+          to: { height: "0" },
         },
       },
-      animation: {
+      animation: { // Example
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
       },
     },
   },
   plugins: [require("tailwindcss-animate")],
-}
-
+};
