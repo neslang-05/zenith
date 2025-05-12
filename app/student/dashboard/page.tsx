@@ -337,104 +337,51 @@ const LessonsContent = () => {
         </div>
       </div>
 
-      <h2 className="text-2xl font-bold text-gray-800 mb-6">Today's Courses</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {courses.map((course, index) => (
-          <CourseCard
-            key={index}
-            title={course.title}
-            progress={course.progress}
-            duration={course.duration}
-            students={course.students}
-            type={course.type}
-            assignment={course.assignment}
-          />
-        ))}
-      </div>
-    </>
-  );
-};
+                {/* Results Section */}
+                <div className="bg-white shadow rounded-lg p-6">
+                    <h3 className="text-xl font-semibold text-gray-800 mb-4">My Results</h3>
+                    {resultsLoading ? (
+                        <LoadingSpinner />
+                    ) : results.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exam/Semester</th>
+                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks/Grade</th>
+                                        {/* Optional: Add date column */}
+                                        {/* <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Added</th> */}
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {results.map((result) => (
+                                        <tr key={result.id}>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{result.examName}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{result.subjectName}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{result.marks}</td>
+                                            {/* Optional: Display formatted date */}
+                                            {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {result.timestamp ? result.timestamp.toDate().toLocaleDateString() : 'N/A'}
+                       </td> */}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <p className="text-gray-500">No results found.</p>
+                    )}
+                </div>
+            </main>
 
-
-// --- MAIN PAGE COMPONENT (Orchestrator) ---
-type ActiveView = 'profile' | 'results' | 'lessons' | 'materials' | 'assessments';
-
-const StudentPage = () => {
-  const [activeView, setActiveView] = useState<ActiveView>('lessons'); // Default to lessons view
-
-  const renderContent = () => {
-    switch (activeView) {
-      case 'profile':
-        return <ProfileContent />;
-      case 'results':
-        return <ResultsContent />;
-      case 'lessons':
-        return <LessonsContent />;
-      // Add cases for 'materials', 'assessments'
-      default:
-        return <LessonsContent />; // Fallback to lessons
-    }
-  };
-
-  return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
-      <div className="w-80 bg-blue-900 text-white flex flex-col flex-shrink-0">
-        <div className="p-6 text-2xl font-bold border-b border-blue-800">Student Dashboard</div>
-        <div className="flex-grow flex flex-col space-y-2 p-4">
-          <NavItem
-            icon="user"
-            label="Profile"
-            active={activeView === 'profile'}
-            onClick={() => setActiveView('profile')}
-          />
-          <NavItem
-            icon="book" // Assuming 'book' icon is for Lessons
-            label="Lessons"
-            active={activeView === 'lessons'}
-            onClick={() => setActiveView('lessons')}
-          />
-          <NavItem
-            icon="briefcase"
-            label="Materials"
-            active={activeView === 'materials'}
-            onClick={() => setActiveView('materials')}
-          />
-          <NavItem
-            icon="chart"
-            label="Results"
-            active={activeView === 'results'}
-            onClick={() => setActiveView('results')}
-          />
-          <NavItem
-            icon="clipboard"
-            label="Assessments"
-            active={activeView === 'assessments'}
-            onClick={() => setActiveView('assessments')}
-          />
+            {/* Footer */}
+            <footer className="w-full text-center p-4 text-gray-500 text-sm mt-8 border-t border-gray-200 bg-white">
+                Developed by Synergy Systems for Manipur Technical University<br />
+                Copyright © 2025
+            </footer>
         </div>
-        <div className="p-4 mt-auto border-t border-blue-800">
-          <LogoutButton />
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex-grow p-6 md:p-8 overflow-y-auto">
-        <div className="flex flex-col md:flex-row items-center justify-between mb-8">
-          <div className="relative w-full md:w-96 mb-4 md:mb-0">
-            <input
-              type="text"
-              placeholder={`Search in ${activeView}...`}
-              className="w-full p-3 pl-5 pr-12 rounded-full bg-white text-gray-700 border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-            />
-            <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          </div>
-          <div className="text-indigo-900 text-4xl font-bold">Zenith</div>
-        </div>
-        {renderContent()}
-      </div>
-    </div>
-  );
+    );
 };
 
 export default StudentPage;

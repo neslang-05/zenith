@@ -208,7 +208,7 @@ const AdminDashboardPage = () => {
 
       {/* Footer */}
        <footer className="w-full text-center p-4 text-gray-500 text-sm mt-8 border-t border-gray-200 bg-white">
-          Developed by Synergy Systems for Manipur Technical University<br/>
+          Developed by Synergy Systems<br/>
           Copyright © 2025
       </footer>
     </div>
