@@ -129,7 +129,7 @@ const AddResultsPage = () => {
         if (!subjectName.trim() || !marks.trim() || !examName.trim()) {
             setFormError("Please fill in Subject Name, Marks/Grade, and Exam Name.");
             return;
-        }
+        }                                           
 
         setIsAddingResult(true);
 

@@ -35,19 +35,19 @@ const ZenithNotFound = () => {
                   Return to Home
                 </Link>
 
-                <Link
-                  href="/dashboard"
+                {/* <Link
+                  href="/"
                   className="inline-block w-full bg-green-700 text-white py-3 rounded-md font-semibold shadow-sm hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all text-center" // Lighter bg, bolder font, shadow, focus ring
                 >
                   Go to Dashboard
-                </Link>
+                </Link> */}
               </div>
               {/* --- End Button Section --- */}
 
 
               <div className="mt-6 text-sm text-gray-500">
                 <p>Need help? Contact our support team at</p>
-                <p className="font-medium text-blue-600">support@mtu.ac.in</p>
+                <p className="font-medium text-blue-600">support@zenith.app</p>
               </div>
             </div>
           </div>
@@ -64,7 +64,7 @@ const ZenithNotFound = () => {
       </div>
 
       <footer className="w-full text-center p-4 text-gray-500 text-sm mt-auto"> {/* Added mt-auto to push footer down */}
-        Developed by Synergy Systems for Manipur Technical University<br />
+        Developed by Synergy Systems <br />
         Copyright - 2025
       </footer>
     </div>
