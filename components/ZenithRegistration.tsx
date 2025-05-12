@@ -136,7 +136,7 @@ const AdminSignUpPage = () => { // Renamed component for clarity
               <input
                 id="institutionName"
                 type="text"
-                placeholder="e.g., Manipur Technical University"
+                placeholder="e.g., Some University or College Name"
                 value={institutionName}
                 onChange={(e) => setInstitutionName(e.target.value)}
                 className="w-full p-3 border border-gray-300 rounded-md text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -154,7 +154,7 @@ const AdminSignUpPage = () => { // Renamed component for clarity
                 <input
                   id="email"
                   type="email"
-                  placeholder="admin@your-institution.edu"
+                  placeholder="admin@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full p-3 border border-gray-300 rounded-md text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -310,7 +310,7 @@ const AdminSignUpPage = () => { // Renamed component for clarity
 
       {/* Footer */}
       <footer className="w-full text-center p-4 text-gray-500 text-sm mt-auto">
-        Developed by Synergy Systems for Manipur Technical University<br />
+        Developed by Synergy Systems<br />
         Copyright © 2025
       </footer>
     </div>

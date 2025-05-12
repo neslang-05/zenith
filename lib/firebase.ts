@@ -47,6 +47,7 @@ const firebaseConfig = {
 
 
 
+
 // --- Initialize Firebase App (Singleton Pattern) ---
 // Check if Firebase App has already been initialized
 // Important for Next.js with Hot Module Replacement (HMR)
