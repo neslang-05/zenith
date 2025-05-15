@@ -114,7 +114,7 @@ const StudentManagementContent = () => {
     const students = [
         { id: 'STU-1001', name: 'Joymangol', program: 'Computer Science', status: 'Active', lastActivity: '2 hours ago' },
         { id: 'STU-1002', name: 'Yaikhomba', program: 'Business Administration', status: 'Active', lastActivity: '1 day ago' },
-        { id: 'STU-1003', name: 'Lihamba L.', program: 'Electrical Engineering', status: 'Inactive', lastActivity: '2 weeks ago' },
+        { id: 'STU-1003', name: 'Llhanba L', program: 'Electrical Engineering', status: 'Inactive', lastActivity: '2 weeks ago' },
         { id: 'STU-1004', name: 'Ryan L', program: 'Psychology', status: 'Active', lastActivity: '3 hours ago' },
         { id: 'STU-1005', name: 'Wilaim Oinam', program: 'Mathematics', status: 'Suspended', lastActivity: '1 month ago' },
     ];

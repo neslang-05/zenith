@@ -1,5 +1,3 @@
-// lib/firebase.ts
-
 import { initializeApp, FirebaseApp, getApps, getApp } from 'firebase/app';
 import {
     getAuth,
@@ -43,8 +41,6 @@ import {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
-
-
 
 // --- Initialize Firebase App (Singleton Pattern) ---
 // Check if Firebase App has already been initialized

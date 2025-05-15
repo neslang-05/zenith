@@ -10,7 +10,7 @@ import { auth, createUserWithEmailAndPassword, createUserProfile, getAllStudents
 const LoadingSpinner = ({ size = 'h-5 w-5' }: { size?: string }) => (
     <div className={`animate-spin rounded-full ${size} border-t-2 border-b-2 border-indigo-500`}></div>
 );
-
+    
 // Interface for type safety
 interface Student { // Simpler interface for clarity
     id: string; // UID
