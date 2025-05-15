@@ -31,9 +31,9 @@ import {
 } from 'firebase/firestore';
 
 //--- Environment Variables for Firebase Config (Recommended) ---
-// 
-const firebaseConfig = {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY, // Access prefixed variable
+
+ const firebaseConfig = {
+     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY, // Access prefixed variable
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
@@ -41,9 +41,6 @@ const firebaseConfig = {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
-
-
-
 
 // --- Initialize Firebase App (Singleton Pattern) ---
 // Check if Firebase App has already been initialized
