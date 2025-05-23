@@ -1,3 +1,5 @@
+<<<<<<< HEAD
+=======
 "use client";
 
 import React, { useState, ReactNode } from 'react';
@@ -523,3 +525,4 @@ const StudentPage = () => {
 };
 
 export default StudentPage;
+>>>>>>> 492cd48 (Added Assessment component)

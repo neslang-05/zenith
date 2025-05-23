@@ -1,3 +1,6 @@
+
+// lib/firebase.ts
+
 import { initializeApp, FirebaseApp, getApps, getApp } from 'firebase/app';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
@@ -44,17 +47,6 @@ import {
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-
-
-
-
-
-
-
-
-// --- Initialize Firebase App (Singleton Pattern) ---
-// Check if Firebase App has already been initialized
-// Important for Next.js with Hot Module Replacement (HMR)
 let app: FirebaseApp;
 if (getApps().length === 0) {
     try {
@@ -329,3 +321,4 @@ export {
     createUserWithEmailAndPassword
 };
 // Note: Exporting `auth` and `db` directly above is usually preferred over default exports.
+
