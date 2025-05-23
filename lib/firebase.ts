@@ -28,6 +28,7 @@ import {
     Timestamp, // Import Timestamp type if needed elsewhere
     Firestore,
     DocumentData,
+    updateDoc,
     DocumentReference,
     QuerySnapshot,
     limit,
@@ -46,11 +47,6 @@ import {
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-
-
-// --- Initialize Firebase App (Singleton Pattern) ---
-// Check if Firebase App has already been initialized
-// Important for Next.js with Hot Module Replacement (HMR)
 let app: FirebaseApp;
 if (getApps().length === 0) {
     try {
@@ -142,26 +138,26 @@ export const signOutUser = async (): Promise<void> => {
  * @param additionalData - Object containing role-specific data (e.g., { institutionName: 'MTU' } for admin, { name: 'John Doe', registrationNumber: '123' } for student).
  */
 export const createUserProfile = async (
-    uid: string,
-    email: string,
-    role: 'admin' | 'student' | 'faculty', // Added 'faculty'
-    additionalData: Record<string, any> = {}
+  uid: string,
+  email: string,
+  role: 'admin' | 'student' | 'faculty',
+  additionalData: Record<string, any> = {}
 ): Promise<void> => {
-    try {
-        const userDocRef = doc(db, 'users', uid);
-        const profileData = {
-            uid, // Store uid in the document as well if needed for queries
-            email,
-            role,
-            createdAt: serverTimestamp(), // Track creation time
-            ...additionalData,
-        };
-        await setDoc(userDocRef, profileData, { merge: true }); // Use merge: true to avoid overwriting accidentally
-        console.log(`User profile created/updated for UID: ${uid} with role: ${role}`);
-    } catch (error) {
-        console.error("Error creating/updating user profile:", error);
-        throw error;
-    }
+  try {
+      const userDocRef = doc(db, 'users', uid);
+      const profileData = {
+          uid,
+          email,
+          role,
+          createdAt: serverTimestamp(),
+          ...additionalData,
+      };
+      await setDoc(userDocRef, profileData, { merge: true });
+      console.log(`User profile created/updated for UID: ${uid} with role: ${role}`);
+  } catch (error) {
+      console.error("Error creating/updating user profile:", error);
+      throw error;
+  }
 };
 
 /**
@@ -183,6 +179,29 @@ export const getUserProfile = async (uid: string): Promise<DocumentData | null> 
         console.error("Error fetching user profile:", error);
         throw error;
     }
+};
+
+/**
+ * Updates an existing user's profile document in Firestore.
+ * @param uid - The Firebase Auth User ID.
+ * @param dataToUpdate - Object containing fields to update.
+ */
+export const updateUserProfile = async (
+  uid: string,
+  dataToUpdate: Partial<DocumentData> // Allows partial updates
+): Promise<void> => {
+  try {
+      const userDocRef = doc(db, 'users', uid);
+      const updateData = {
+          ...dataToUpdate,
+          updatedAt: serverTimestamp(), // Track update time
+      };
+      await updateDoc(userDocRef, updateData);
+      console.log(`User profile updated for UID: ${uid}`);
+  } catch (error) {
+      console.error("Error updating user profile:", error);
+      throw error;
+  }
 };
 
 /**
@@ -295,14 +314,11 @@ export const getAllStudents = async (): Promise<(DocumentData & { id: string })[
 
 // --- Export initialized services and specific SDK functions/types as needed ---
 export {
-    app,
-    onAuthStateChanged,
-    serverTimestamp,
-    Timestamp,
-    // --- Re-export the original SDK function for direct use ---
-    // This allows components like ManageStudentsPage to import and use it
-    // directly via `import { createUser... } from '../lib/firebase'`
-    createUserWithEmailAndPassword
+  app,
+  onAuthStateChanged,
+  serverTimestamp,
+  Timestamp,
+  createUserWithEmailAndPassword
 };
 // Note: Exporting `auth` and `db` directly above is usually preferred over default exports.
 >>>>>>> 492cd48 (Added Assessment component)
