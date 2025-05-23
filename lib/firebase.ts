@@ -1,8 +1,8 @@
-<<<<<<< HEAD
-=======
+
 // lib/firebase.ts
 
 import { initializeApp, FirebaseApp, getApps, getApp } from 'firebase/app';
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
     getAuth,
     // Ensure this is imported for direct use/re-export
@@ -138,26 +138,26 @@ export const signOutUser = async (): Promise<void> => {
  * @param additionalData - Object containing role-specific data (e.g., { institutionName: 'MTU' } for admin, { name: 'John Doe', registrationNumber: '123' } for student).
  */
 export const createUserProfile = async (
-  uid: string,
-  email: string,
-  role: 'admin' | 'student' | 'faculty',
-  additionalData: Record<string, any> = {}
+    uid: string,
+    email: string,
+    role: 'admin' | 'student' | 'faculty',
+    additionalData: Record<string, any> = {}
 ): Promise<void> => {
-  try {
-      const userDocRef = doc(db, 'users', uid);
-      const profileData = {
-          uid,
-          email,
-          role,
-          createdAt: serverTimestamp(),
-          ...additionalData,
-      };
-      await setDoc(userDocRef, profileData, { merge: true });
-      console.log(`User profile created/updated for UID: ${uid} with role: ${role}`);
-  } catch (error) {
-      console.error("Error creating/updating user profile:", error);
-      throw error;
-  }
+    try {
+        const userDocRef = doc(db, 'users', uid);
+        const profileData = {
+            uid,
+            email,
+            role,
+            createdAt: serverTimestamp(),
+            ...additionalData,
+        };
+        await setDoc(userDocRef, profileData, { merge: true });
+        console.log(`User profile created/updated for UID: ${uid} with role: ${role}`);
+    } catch (error) {
+        console.error("Error creating/updating user profile:", error);
+        throw error;
+    }
 };
 
 /**
@@ -187,21 +187,21 @@ export const getUserProfile = async (uid: string): Promise<DocumentData | null> 
  * @param dataToUpdate - Object containing fields to update.
  */
 export const updateUserProfile = async (
-  uid: string,
-  dataToUpdate: Partial<DocumentData> // Allows partial updates
+    uid: string,
+    dataToUpdate: Partial<DocumentData> // Allows partial updates
 ): Promise<void> => {
-  try {
-      const userDocRef = doc(db, 'users', uid);
-      const updateData = {
-          ...dataToUpdate,
-          updatedAt: serverTimestamp(), // Track update time
-      };
-      await updateDoc(userDocRef, updateData);
-      console.log(`User profile updated for UID: ${uid}`);
-  } catch (error) {
-      console.error("Error updating user profile:", error);
-      throw error;
-  }
+    try {
+        const userDocRef = doc(db, 'users', uid);
+        const updateData = {
+            ...dataToUpdate,
+            updatedAt: serverTimestamp(), // Track update time
+        };
+        await updateDoc(userDocRef, updateData);
+        console.log(`User profile updated for UID: ${uid}`);
+    } catch (error) {
+        console.error("Error updating user profile:", error);
+        throw error;
+    }
 };
 
 /**
@@ -314,11 +314,11 @@ export const getAllStudents = async (): Promise<(DocumentData & { id: string })[
 
 // --- Export initialized services and specific SDK functions/types as needed ---
 export {
-  app,
-  onAuthStateChanged,
-  serverTimestamp,
-  Timestamp,
-  createUserWithEmailAndPassword
+    app,
+    onAuthStateChanged,
+    serverTimestamp,
+    Timestamp,
+    createUserWithEmailAndPassword
 };
 // Note: Exporting `auth` and `db` directly above is usually preferred over default exports.
 >>>>>>> 492cd48 (Added Assessment component)
