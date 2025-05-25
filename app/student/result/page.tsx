@@ -22,98 +22,7 @@ interface SemesterGroup {
 }
 
 // --- Dummy Data (Temporary) ---
-const dummyResults: Result[] = [
-    {
-        id: 'dummy-1',
-        courseId: 'course-1',
-        courseName: 'Introduction to Programming',
-        courseCode: 'CS101',
-        internalMarks: 18,
-        midTermMarks: 25,
-        endTermMarks: 40,
-        totalMarks: 83,
-        grade: 'A',
-        semester: 1,
-        academicYear: '2023-2024',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-        internalPublished: true,
-        midTermPublished: true,
-        endTermPublished: true
-    },
-    {
-        id: 'dummy-2',
-        courseId: 'course-2',
-        courseName: 'Calculus I',
-        courseCode: 'MA101',
-        internalMarks: 15,
-        midTermMarks: 20,
-        endTermMarks: 35,
-        totalMarks: 70,
-        grade: 'B+',
-        semester: 1,
-        academicYear: '2023-2024',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-        internalPublished: true,
-        midTermPublished: true,
-        endTermPublished: true
-    },
-    {
-        id: 'dummy-3',
-        courseId: 'course-3',
-        courseName: 'Engineering Physics',
-        courseCode: 'PH101',
-        internalMarks: 17,
-        midTermMarks: 22,
-        endTermMarks: 38,
-        totalMarks: 77,
-        grade: 'A',
-        semester: 1,
-        academicYear: '2023-2024',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-        internalPublished: true,
-        midTermPublished: true,
-        endTermPublished: true
-    },
-    {
-        id: 'dummy-4',
-        courseId: 'course-4',
-        courseName: 'Data Structures',
-        courseCode: 'CS201',
-        internalMarks: 19,
-        midTermMarks: 28,
-        endTermMarks: null,
-        totalMarks: null,
-        grade: null,
-        semester: 2,
-        academicYear: '2023-2024',
-        status: 'pending',
-        lastUpdated: new Date().toISOString(),
-        internalPublished: true,
-        midTermPublished: true,
-        endTermPublished: false
-    },
-    {
-        id: 'dummy-5',
-        courseId: 'course-5',
-        courseName: 'Basic Electrical Engineering',
-        courseCode: 'EE201',
-        internalMarks: 16,
-        midTermMarks: 24,
-        endTermMarks: 30,
-        totalMarks: 70,
-        grade: 'B+',
-        semester: 2,
-        academicYear: '2023-2024',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-        internalPublished: true,
-        midTermPublished: true,
-        endTermPublished: true
-    }
-];
+// const dummyResults: Result[] = [ ... ];
 // --- End Dummy Data ---
 
 
@@ -159,22 +68,19 @@ const ResultsTable: React.FC<{ results: Result[] }> = ({ results }) => {
                 {result.courseName}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {result.internalMarks !== null ? result.internalMarks : '-'}
+                {result.internalMarks !== null && result.internalMarks !== undefined ? result.internalMarks : '-'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {result.midTermMarks !== null ? result.midTermMarks : '-'}
+                {result.midTermMarks !== null && result.midTermMarks !== undefined ? result.midTermMarks : '-'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {/* Only show End-Term if status is published */}
-                {result.status === 'published' ? (result.endTermMarks !== null ? result.endTermMarks : '-') : 'Pending'}
+                {result.status === 'published' ? (result.endTermMarks !== null && result.endTermMarks !== undefined ? result.endTermMarks : '-') : 'Pending'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                 {/* Only show Total if status is published */}
-                {result.status === 'published' ? (result.totalMarks !== null ? result.totalMarks : '-') : 'Pending'}
+                {result.status === 'published' ? (result.totalMarks !== null && result.totalMarks !== undefined ? result.totalMarks : '-') : 'Pending'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                 {/* Only show Grade if status is published */}
-                {result.status === 'published' ? (result.grade || '-') : 'Pending'}
+                {result.status === 'published' ? (result.grade !== null && result.grade !== undefined ? result.grade : '-') : 'Pending'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -296,16 +202,11 @@ const StudentResultPage = () => {
   const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
   const [profileData, setProfileData] = useState<DocumentData | null>(null);
   const [results, setResults] = useState<Result[]>([]);
-  const [loading, setLoading] = useState(true); // Set to true initially for dummy data load
+  const [loading, setLoading] = useState(true);
   const [selectedSemester, setSelectedSemester] = useState<number | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Use this flag to easily switch between dummy data and real data
-  const USE_DUMMY_DATA = true; // <-- Set to false to fetch real data
-
-
   useEffect(() => {
-      // Keep auth state listener if needed for other parts, but it won't trigger Firebase fetch if USE_DUMMY_DATA is true
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUserUid(user.uid);
@@ -316,51 +217,89 @@ const StudentResultPage = () => {
     return () => unsubscribe();
   }, []);
 
-
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-
-      if (USE_DUMMY_DATA) {
-        // --- Load Dummy Data ---
-        // We might simulate a small delay to mimic network latency
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setResults(dummyResults);
-        // You can also set dummy profile data here if needed for layout
-        setProfileData({ name: 'Dummy Student', registrationNumber: 'DUMMY123' }); // Example dummy profile
+      if (!currentUserUid) {
         setLoading(false);
-      } else {
-        // --- Load Real Data from Firebase ---
-         if (!currentUserUid) {
-             setLoading(false); // Stop loading if no user is logged in
-             setResults([]); // Clear results if no user
-             setProfileData(null); // Clear profile
-             return; // Exit if no user
-         }
+        setResults([]);
+        setProfileData(null);
+        return;
+      }
+      try {
+        const [profile, resultsData] = await Promise.all([
+          getUserProfile(currentUserUid),
+          getStudentResults(currentUserUid)
+        ]);
+        setProfileData(profile);
+        
+        // Map Firestore data to Result interface
+        const mappedResults: Result[] = (resultsData as StudentResult[]).map((r) => {
+          // Get semester and academicYear from courseData if present, else fallback
+          const semester = (r as any).semester || 0;
+          const academicYear = (r as any).academicYear || '';
 
-        try {
-          const [profile, resultsData] = await Promise.all([
-            getUserProfile(currentUserUid),
-            getStudentResults(currentUserUid)
-          ]);
+          // Always calculate totalMarks if any marks are present
+          const internal = typeof r.internalMarks === 'number' ? r.internalMarks : 0;
+          const midTerm = typeof r.midTermMarks === 'number' ? r.midTermMarks : 0;
+          const endTerm = typeof r.endTermMarks === 'number' ? r.endTermMarks : 0;
+          
+          // Calculate total marks
+          const totalMarks = internal + midTerm + endTerm;
 
-          setProfileData(profile);
-          setResults(resultsData as Result[]);
-        } catch (error) {
-          console.error("Error fetching data:", error);
-           setResults([]); // Clear results on error
-           setProfileData(null); // Clear profile on error
-        } finally {
-          setLoading(false);
-        }
+          // Always calculate grade based on total marks
+          let grade = '';
+          if (totalMarks >= 90) grade = 'O';
+          else if (totalMarks >= 80) grade = 'A+';
+          else if (totalMarks >= 70) grade = 'A';
+          else if (totalMarks >= 60) grade = 'B+';
+          else if (totalMarks >= 50) grade = 'B';
+          else if (totalMarks >= 40) grade = 'C';
+          else if (totalMarks >= 35) grade = 'P';
+          else grade = 'F';
+
+          // Determine status based on mark availability and publication status
+          const hasAllMarks = r.internalMarks !== null && 
+                             r.midTermMarks !== null && 
+                             r.endTermMarks !== null;
+                             
+          const status = hasAllMarks && r.internalPublished && 
+                        r.midTermPublished && r.endTermPublished 
+                        ? 'published' : 'pending';
+
+          // Determine lastUpdated
+          let lastUpdated = '';
+          const times = [
+            (r as any).facultyPublishedAt,
+            (r as any).adminPublishedAt,
+            (r as any).updatedAt
+          ].filter(Boolean);
+          if (times.length > 0) {
+            const latest = times.reduce((a, b) => (a && b && a.seconds > b.seconds ? a : b));
+            lastUpdated = latest.toDate ? latest.toDate().toISOString() : '';
+          }
+
+          return {
+            ...r,
+            totalMarks: hasAllMarks ? totalMarks : null,
+            semester,
+            academicYear,
+            status,
+            lastUpdated,
+            grade: hasAllMarks ? grade : null,
+          };
+        });
+        setResults(mappedResults);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setResults([]);
+        setProfileData(null);
+      } finally {
+        setLoading(false);
       }
     };
-
     fetchData();
-    // Add currentUserUid as a dependency ONLY if NOT using dummy data always
-    // If USE_DUMMY_DATA is true, currentUserUid isn't needed for this effect's data fetching
-  }, [/* currentUserUid, */ USE_DUMMY_DATA]); // Added USE_DUMMY_DATA as dependency
-
+  }, [currentUserUid]);
 
   const groupResultsBySemester = (results: Result[]): SemesterGroup[] => {
     const grouped = results.reduce((acc, result) => {
