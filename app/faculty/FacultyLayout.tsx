@@ -4,10 +4,11 @@ import React, { useState, ReactNode, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import {
-  Search, LogOut, Settings, User, BookOpen, BarChart, Briefcase, ClipboardList, Menu, ChevronLeft, Sun, Moon, Home
+  LayoutDashboard, BookOpen, Edit, LogOut, Settings, Menu, ChevronLeft, User, Sun, Moon, Search
 } from 'lucide-react';
 import { auth, signOutUser, onAuthStateChanged, getUserProfile } from '@/lib/firebase';
-import { DocumentData, User as FirebaseUser } from 'firebase/auth'; // Renamed User
+import { User as FirebaseUser } from 'firebase/auth';
+import { DocumentData } from 'firebase/firestore';
 import Image from 'next/image'; // For logo
 
 // Loading Spinner
@@ -69,14 +70,14 @@ const LogoutButton = ({ isSidebarOpen }: { isSidebarOpen: boolean }) => {
 };
 
 
-interface StudentLayoutProps {
+interface FacultyLayoutProps {
   children: ReactNode;
 }
 
-const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
+const FacultyLayout: React.FC<FacultyLayoutProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null); // Use FirebaseUser
-  const [studentProfile, setStudentProfile] = useState<DocumentData | null>(null);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [facultyProfile, setFacultyProfile] = useState<DocumentData | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const router = useRouter();
@@ -88,14 +89,14 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
         setCurrentUser(user);
         try {
           const profile = await getUserProfile(user.uid);
-          if (profile && profile.role === 'student') {
-            setStudentProfile(profile);
+          if (profile && profile.role === 'faculty') {
+            setFacultyProfile(profile);
           } else {
             await signOutUser();
-            router.push('/login?error=unauthorized_student');
+            router.push('/login?error=unauthorized_faculty');
           }
         } catch (error) {
-          console.error("Error fetching student profile:", error);
+          console.error("Error fetching faculty profile:", error);
           await signOutUser();
           router.push('/login?error=profile_error');
         }
@@ -105,18 +106,17 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
       }
       setAuthLoading(false);
     });
-
-    // Theme persistence
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-        setIsDarkMode(savedTheme === 'dark');
-        if (savedTheme === 'dark') document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-    } else {
-       const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-       setIsDarkMode(prefersDark);
-       if (prefersDark) document.documentElement.classList.add('dark');
-    }
+     // Theme persistence
+     const savedTheme = localStorage.getItem('theme');
+     if (savedTheme) {
+         setIsDarkMode(savedTheme === 'dark');
+         if (savedTheme === 'dark') document.documentElement.classList.add('dark');
+         else document.documentElement.classList.remove('dark');
+     } else { // Set based on system preference if no saved theme
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setIsDarkMode(prefersDark);
+        if (prefersDark) document.documentElement.classList.add('dark');
+     }
 
     return () => unsubscribe();
   }, [router]);
@@ -129,25 +129,23 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
   };
 
   const navItems = [
-    { iconElement: <Home size={22} />, label: 'Dashboard', href: '/student' },
-    { iconElement: <User size={22} />, label: 'My Profile', href: '/student/profile' },
-    { iconElement: <BookOpen size={22} />, label: 'Courses', href: '/student?view=courses' },
-    { iconElement: <ClipboardList size={22} />, label: 'My Marks', href: '/student?view=marks' },
-    // { iconElement: <Briefcase size={22} />, label: 'Materials', href: '/student?view=materials' }, // From original
-    // { iconElement: <BarChart size={22} />, label: 'Results (Legacy)', href: '/student/result' }, // Keep legacy or integrate
-    { iconElement: <Settings size={22} />, label: 'Settings', href: '/student/setting' },
+    { iconElement: <LayoutDashboard size={22} />, label: 'Dashboard', href: '/faculty/dashboard' },
+    { iconElement: <BookOpen size={22} />, label: 'My Courses', href: '/faculty/dashboard?view=courses' }, // Example query param
+    { iconElement: <Edit size={22} />, label: 'Manage Marks', href: '/faculty/dashboard?view=marks' },   // Example query param
+    // { iconElement: <User size={22} />, label: 'Profile', href: '/faculty/profile' }, // If a separate profile page exists
+    // { iconElement: <Settings size={22} />, label: 'Settings', href: '/faculty/settings' }, // If settings page exists
   ];
 
   if (authLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-100 dark:bg-gray-900">
         <LoadingSpinner size="h-10 w-10" />
-        <p className="ml-3 text-xl text-gray-700 dark:text-gray-300">Authenticating Student...</p>
+        <p className="ml-3 text-xl text-gray-700 dark:text-gray-300">Authenticating Faculty...</p>
       </div>
     );
   }
 
-  if (!currentUser || !studentProfile) {
+  if (!currentUser || !facultyProfile) {
     return (
         <div className="flex h-screen items-center justify-center bg-gray-100 dark:bg-gray-900">
             <p className="text-xl text-gray-700 dark:text-gray-300">Redirecting to login...</p>
@@ -155,19 +153,19 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
     );
   }
 
-
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden">
+      {/* Sidebar */}
       <div
         className={`bg-blue-900 dark:bg-gray-800 text-white flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out
                     ${isSidebarOpen ? 'w-64' : 'w-20'}`}
       >
         <div className={`p-4 flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'} border-b border-blue-800 dark:border-gray-700 h-[65px] shrink-0`}>
           {isSidebarOpen && (
-            <Link href="/student" passHref legacyBehavior>
+            <Link href="/faculty/dashboard" passHref legacyBehavior>
               <a className="flex items-center space-x-2">
                 <Image src="/zenith-logo.svg" alt="Zenith Logo" width={30} height={30} className="dark:brightness-0 dark:invert" />
-                <span className="text-lg font-bold whitespace-nowrap truncate">Student Portal</span>
+                <span className="text-lg font-bold whitespace-nowrap truncate">Faculty Portal</span>
               </a>
             </Link>
           )}
@@ -187,7 +185,7 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
               iconElement={item.iconElement}
               label={item.label}
               href={item.href}
-              active={pathname === item.href || (item.href.includes('?view=') && pathname === '/student' && new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('view') === item.href.split('?view=')[1])}
+              active={pathname === item.href || (item.href.includes('?view=') && pathname === '/faculty/dashboard' && new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('view') === item.href.split('?view=')[1])}
               isSidebarOpen={isSidebarOpen}
             />
           ))}
@@ -198,26 +196,27 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
               {isDarkMode ? <Sun size={22} /> : <Moon size={22} />}
               {isSidebarOpen && <span className="text-md whitespace-nowrap truncate">{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>}
             </button>
-          <LogoutButton isSidebarOpen={isSidebarOpen} />
+            <LogoutButton isSidebarOpen={isSidebarOpen} />
         </div>
       </div>
 
+      {/* Main Content Area */}
       <div className="flex-grow flex flex-col overflow-hidden">
         <header className="bg-white dark:bg-gray-800 shadow-sm p-4 sm:p-5 flex items-center justify-between flex-shrink-0 border-b dark:border-gray-700">
             <div className="relative w-full md:w-96">
                 <input
                 type="text"
-                placeholder="Search portal..."
+                placeholder="Search (e.g., courses, students)..."
                 className="w-full p-3 pl-10 pr-4 rounded-full bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-sm"
                 />
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" size={18} />
             </div>
             <div className="flex items-center space-x-4 ml-4">
-                 <span className="text-sm text-gray-700 dark:text-gray-300 hidden md:block">
-                    {studentProfile?.name || 'Student'}
+                <span className="text-sm text-gray-700 dark:text-gray-300 hidden md:block">
+                    Welcome, {facultyProfile?.name || 'Faculty'}
                 </span>
                 <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-700 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-200 font-semibold ring-2 ring-indigo-200 dark:ring-indigo-600">
-                  {studentProfile?.photoURL ? <Image src={studentProfile.photoURL} alt="P" width={40} height={40} className="rounded-full object-cover" /> : (studentProfile?.name ? studentProfile.name.split(" ").map((n: string) => n[0]).join("").toUpperCase() : 'S')}
+                  {facultyProfile?.name ? facultyProfile.name.split(" ").map((n: string) => n[0]).join("").toUpperCase() : 'F'}
                 </div>
             </div>
         </header>
@@ -229,4 +228,4 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
   );
 };
 
-export default StudentLayout;
+export default FacultyLayout;

@@ -47,7 +47,7 @@ const ZenithLogin = () => {
       if (userRole === 'admin') {
         router.push('/admin/console');
       } else if (userRole === 'student') {
-        router.push('/student/dashboard');
+        router.push('/student');
       } else if (userRole === 'faculty') {
         router.push('/faculty/dashboard');
       } else {

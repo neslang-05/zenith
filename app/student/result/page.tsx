@@ -3,23 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import StudentLayout from '../StudentLayout';
 import { FileText, Download, Filter, Search, ChevronDown, AlertCircle } from 'lucide-react';
-import { auth, getUserProfile, getStudentResults } from '@/lib/firebase'; // Keep imports for real data later
+import { auth, getUserProfile, getStudentResults, StudentResult } from '@/lib/firebase';
 import { DocumentData } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
-interface Result {
-  id: string;
-  subjectCode: string;
-  subjectName: string;
-  internalMarks: number | null;
-  midTermMarks: number | null;
-  endTermMarks: number | null;
+interface Result extends StudentResult {
   totalMarks: number | null;
-  grade: string | null;
   semester: number;
   academicYear: string;
   status: 'pending' | 'published';
-  lastUpdated: string; // ISO string or similar
+  lastUpdated: string;
 }
 
 interface SemesterGroup {
@@ -32,8 +25,9 @@ interface SemesterGroup {
 const dummyResults: Result[] = [
     {
         id: 'dummy-1',
-        subjectCode: 'CS101',
-        subjectName: 'Introduction to Programming',
+        courseId: 'course-1',
+        courseName: 'Introduction to Programming',
+        courseCode: 'CS101',
         internalMarks: 18,
         midTermMarks: 25,
         endTermMarks: 40,
@@ -43,11 +37,15 @@ const dummyResults: Result[] = [
         academicYear: '2023-2024',
         status: 'published',
         lastUpdated: new Date().toISOString(),
+        internalPublished: true,
+        midTermPublished: true,
+        endTermPublished: true
     },
     {
         id: 'dummy-2',
-        subjectCode: 'MA101',
-        subjectName: 'Calculus I',
+        courseId: 'course-2',
+        courseName: 'Calculus I',
+        courseCode: 'MA101',
         internalMarks: 15,
         midTermMarks: 20,
         endTermMarks: 35,
@@ -57,11 +55,15 @@ const dummyResults: Result[] = [
         academicYear: '2023-2024',
         status: 'published',
         lastUpdated: new Date().toISOString(),
+        internalPublished: true,
+        midTermPublished: true,
+        endTermPublished: true
     },
-     {
+    {
         id: 'dummy-3',
-        subjectCode: 'PH101',
-        subjectName: 'Engineering Physics',
+        courseId: 'course-3',
+        courseName: 'Engineering Physics',
+        courseCode: 'PH101',
         internalMarks: 17,
         midTermMarks: 22,
         endTermMarks: 38,
@@ -71,25 +73,33 @@ const dummyResults: Result[] = [
         academicYear: '2023-2024',
         status: 'published',
         lastUpdated: new Date().toISOString(),
+        internalPublished: true,
+        midTermPublished: true,
+        endTermPublished: true
     },
     {
         id: 'dummy-4',
-        subjectCode: 'CS201',
-        subjectName: 'Data Structures',
+        courseId: 'course-4',
+        courseName: 'Data Structures',
+        courseCode: 'CS201',
         internalMarks: 19,
         midTermMarks: 28,
-        endTermMarks: null, // Pending End Term
+        endTermMarks: null,
         totalMarks: null,
         grade: null,
         semester: 2,
         academicYear: '2023-2024',
         status: 'pending',
         lastUpdated: new Date().toISOString(),
+        internalPublished: true,
+        midTermPublished: true,
+        endTermPublished: false
     },
-     {
+    {
         id: 'dummy-5',
-        subjectCode: 'EE201',
-        subjectName: 'Basic Electrical Engineering',
+        courseId: 'course-5',
+        courseName: 'Basic Electrical Engineering',
+        courseCode: 'EE201',
         internalMarks: 16,
         midTermMarks: 24,
         endTermMarks: 30,
@@ -99,63 +109,10 @@ const dummyResults: Result[] = [
         academicYear: '2023-2024',
         status: 'published',
         lastUpdated: new Date().toISOString(),
-    },
-     {
-        id: 'dummy-6',
-        subjectCode: 'HS201',
-        subjectName: 'Communication Skills',
-        internalMarks: 20,
-        midTermMarks: 29,
-        endTermMarks: 45,
-        totalMarks: 94,
-        grade: 'O',
-        semester: 2,
-        academicYear: '2023-2024',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-    },
-     {
-        id: 'dummy-7',
-        subjectCode: 'CS301',
-        subjectName: 'Algorithms',
-        internalMarks: 17,
-        midTermMarks: 25,
-        endTermMarks: 30, // Example of a lower end-term
-        totalMarks: 72,
-        grade: 'B+',
-        semester: 3,
-        academicYear: '2024-2025',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-    },
-      {
-        id: 'dummy-8',
-        subjectCode: 'MA301',
-        subjectName: 'Discrete Mathematics',
-        internalMarks: 14,
-        midTermMarks: 18,
-        endTermMarks: 25, // Example of potentially failing marks
-        totalMarks: 57,
-        grade: 'P', // Pass with minimum marks
-        semester: 3,
-        academicYear: '2024-2025',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-    },
-      {
-        id: 'dummy-9',
-        subjectCode: 'CS401',
-        subjectName: 'Operating Systems',
-        internalMarks: 18,
-        midTermMarks: 26,
-        endTermMarks: null,
-        totalMarks: null,
-        grade: null,
-        semester: 4,
-        academicYear: '2024-2025',
-        status: 'pending',
-        lastUpdated: new Date().toISOString(),
-    },
+        internalPublished: true,
+        midTermPublished: true,
+        endTermPublished: true
+    }
 ];
 // --- End Dummy Data ---
 
@@ -196,10 +153,10 @@ const ResultsTable: React.FC<{ results: Result[] }> = ({ results }) => {
           {results.map((result) => (
             <tr key={result.id}>
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                {result.subjectCode}
+                {result.courseCode}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {result.subjectName}
+                {result.courseName}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {result.internalMarks !== null ? result.internalMarks : '-'}
@@ -434,8 +391,8 @@ const StudentResultPage = () => {
   const filteredResults = results.filter(result => {
     const matchesSemester = selectedSemester === 'all' || result.semester === selectedSemester;
     const matchesSearch = searchTerm === '' ||
-      result.subjectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      result.subjectCode.toLowerCase().includes(searchTerm.toLowerCase());
+      result.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      result.courseCode.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSemester && matchesSearch;
   });
 
