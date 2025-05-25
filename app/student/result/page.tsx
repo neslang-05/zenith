@@ -3,23 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import StudentLayout from '../StudentLayout';
 import { FileText, Download, Filter, Search, ChevronDown, AlertCircle } from 'lucide-react';
-import { auth, getUserProfile, getStudentResults } from '@/lib/firebase'; // Keep imports for real data later
+import { auth, getUserProfile, getStudentResults, StudentResult } from '@/lib/firebase';
 import { DocumentData } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
-interface Result {
-  id: string;
-  subjectCode: string;
-  subjectName: string;
-  internalMarks: number | null;
-  midTermMarks: number | null;
-  endTermMarks: number | null;
+interface Result extends StudentResult {
   totalMarks: number | null;
-  grade: string | null;
   semester: number;
   academicYear: string;
   status: 'pending' | 'published';
-  lastUpdated: string; // ISO string or similar
+  lastUpdated: string;
 }
 
 interface SemesterGroup {
@@ -29,134 +22,7 @@ interface SemesterGroup {
 }
 
 // --- Dummy Data (Temporary) ---
-const dummyResults: Result[] = [
-    {
-        id: 'dummy-1',
-        subjectCode: 'CS101',
-        subjectName: 'Introduction to Programming',
-        internalMarks: 18,
-        midTermMarks: 25,
-        endTermMarks: 40,
-        totalMarks: 83,
-        grade: 'A',
-        semester: 1,
-        academicYear: '2023-2024',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-    },
-    {
-        id: 'dummy-2',
-        subjectCode: 'MA101',
-        subjectName: 'Calculus I',
-        internalMarks: 15,
-        midTermMarks: 20,
-        endTermMarks: 35,
-        totalMarks: 70,
-        grade: 'B+',
-        semester: 1,
-        academicYear: '2023-2024',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-    },
-     {
-        id: 'dummy-3',
-        subjectCode: 'PH101',
-        subjectName: 'Engineering Physics',
-        internalMarks: 17,
-        midTermMarks: 22,
-        endTermMarks: 38,
-        totalMarks: 77,
-        grade: 'A',
-        semester: 1,
-        academicYear: '2023-2024',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-    },
-    {
-        id: 'dummy-4',
-        subjectCode: 'CS201',
-        subjectName: 'Data Structures',
-        internalMarks: 19,
-        midTermMarks: 28,
-        endTermMarks: null, // Pending End Term
-        totalMarks: null,
-        grade: null,
-        semester: 2,
-        academicYear: '2023-2024',
-        status: 'pending',
-        lastUpdated: new Date().toISOString(),
-    },
-     {
-        id: 'dummy-5',
-        subjectCode: 'EE201',
-        subjectName: 'Basic Electrical Engineering',
-        internalMarks: 16,
-        midTermMarks: 24,
-        endTermMarks: 30,
-        totalMarks: 70,
-        grade: 'B+',
-        semester: 2,
-        academicYear: '2023-2024',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-    },
-     {
-        id: 'dummy-6',
-        subjectCode: 'HS201',
-        subjectName: 'Communication Skills',
-        internalMarks: 20,
-        midTermMarks: 29,
-        endTermMarks: 45,
-        totalMarks: 94,
-        grade: 'O',
-        semester: 2,
-        academicYear: '2023-2024',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-    },
-     {
-        id: 'dummy-7',
-        subjectCode: 'CS301',
-        subjectName: 'Algorithms',
-        internalMarks: 17,
-        midTermMarks: 25,
-        endTermMarks: 30, // Example of a lower end-term
-        totalMarks: 72,
-        grade: 'B+',
-        semester: 3,
-        academicYear: '2024-2025',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-    },
-      {
-        id: 'dummy-8',
-        subjectCode: 'MA301',
-        subjectName: 'Discrete Mathematics',
-        internalMarks: 14,
-        midTermMarks: 18,
-        endTermMarks: 25, // Example of potentially failing marks
-        totalMarks: 57,
-        grade: 'P', // Pass with minimum marks
-        semester: 3,
-        academicYear: '2024-2025',
-        status: 'published',
-        lastUpdated: new Date().toISOString(),
-    },
-      {
-        id: 'dummy-9',
-        subjectCode: 'CS401',
-        subjectName: 'Operating Systems',
-        internalMarks: 18,
-        midTermMarks: 26,
-        endTermMarks: null,
-        totalMarks: null,
-        grade: null,
-        semester: 4,
-        academicYear: '2024-2025',
-        status: 'pending',
-        lastUpdated: new Date().toISOString(),
-    },
-];
+// const dummyResults: Result[] = [ ... ];
 // --- End Dummy Data ---
 
 
@@ -196,28 +62,25 @@ const ResultsTable: React.FC<{ results: Result[] }> = ({ results }) => {
           {results.map((result) => (
             <tr key={result.id}>
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                {result.subjectCode}
+                {result.courseCode}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {result.subjectName}
+                {result.courseName}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {result.internalMarks !== null ? result.internalMarks : '-'}
+                {result.internalMarks !== null && result.internalMarks !== undefined ? result.internalMarks : '-'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {result.midTermMarks !== null ? result.midTermMarks : '-'}
+                {result.midTermMarks !== null && result.midTermMarks !== undefined ? result.midTermMarks : '-'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {/* Only show End-Term if status is published */}
-                {result.status === 'published' ? (result.endTermMarks !== null ? result.endTermMarks : '-') : 'Pending'}
+                {result.status === 'published' ? (result.endTermMarks !== null && result.endTermMarks !== undefined ? result.endTermMarks : '-') : 'Pending'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                 {/* Only show Total if status is published */}
-                {result.status === 'published' ? (result.totalMarks !== null ? result.totalMarks : '-') : 'Pending'}
+                {result.status === 'published' ? (result.totalMarks !== null && result.totalMarks !== undefined ? result.totalMarks : '-') : 'Pending'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                 {/* Only show Grade if status is published */}
-                {result.status === 'published' ? (result.grade || '-') : 'Pending'}
+                {result.status === 'published' ? (result.grade !== null && result.grade !== undefined ? result.grade : '-') : 'Pending'}
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -339,16 +202,11 @@ const StudentResultPage = () => {
   const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
   const [profileData, setProfileData] = useState<DocumentData | null>(null);
   const [results, setResults] = useState<Result[]>([]);
-  const [loading, setLoading] = useState(true); // Set to true initially for dummy data load
+  const [loading, setLoading] = useState(true);
   const [selectedSemester, setSelectedSemester] = useState<number | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Use this flag to easily switch between dummy data and real data
-  const USE_DUMMY_DATA = true; // <-- Set to false to fetch real data
-
-
   useEffect(() => {
-      // Keep auth state listener if needed for other parts, but it won't trigger Firebase fetch if USE_DUMMY_DATA is true
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUserUid(user.uid);
@@ -359,51 +217,89 @@ const StudentResultPage = () => {
     return () => unsubscribe();
   }, []);
 
-
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-
-      if (USE_DUMMY_DATA) {
-        // --- Load Dummy Data ---
-        // We might simulate a small delay to mimic network latency
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setResults(dummyResults);
-        // You can also set dummy profile data here if needed for layout
-        setProfileData({ name: 'Dummy Student', registrationNumber: 'DUMMY123' }); // Example dummy profile
+      if (!currentUserUid) {
         setLoading(false);
-      } else {
-        // --- Load Real Data from Firebase ---
-         if (!currentUserUid) {
-             setLoading(false); // Stop loading if no user is logged in
-             setResults([]); // Clear results if no user
-             setProfileData(null); // Clear profile
-             return; // Exit if no user
-         }
+        setResults([]);
+        setProfileData(null);
+        return;
+      }
+      try {
+        const [profile, resultsData] = await Promise.all([
+          getUserProfile(currentUserUid),
+          getStudentResults(currentUserUid)
+        ]);
+        setProfileData(profile);
+        
+        // Map Firestore data to Result interface
+        const mappedResults: Result[] = (resultsData as StudentResult[]).map((r) => {
+          // Get semester and academicYear from courseData if present, else fallback
+          const semester = (r as any).semester || 0;
+          const academicYear = (r as any).academicYear || '';
 
-        try {
-          const [profile, resultsData] = await Promise.all([
-            getUserProfile(currentUserUid),
-            getStudentResults(currentUserUid)
-          ]);
+          // Always calculate totalMarks if any marks are present
+          const internal = typeof r.internalMarks === 'number' ? r.internalMarks : 0;
+          const midTerm = typeof r.midTermMarks === 'number' ? r.midTermMarks : 0;
+          const endTerm = typeof r.endTermMarks === 'number' ? r.endTermMarks : 0;
+          
+          // Calculate total marks
+          const totalMarks = internal + midTerm + endTerm;
 
-          setProfileData(profile);
-          setResults(resultsData as Result[]);
-        } catch (error) {
-          console.error("Error fetching data:", error);
-           setResults([]); // Clear results on error
-           setProfileData(null); // Clear profile on error
-        } finally {
-          setLoading(false);
-        }
+          // Always calculate grade based on total marks
+          let grade = '';
+          if (totalMarks >= 90) grade = 'O';
+          else if (totalMarks >= 80) grade = 'A+';
+          else if (totalMarks >= 70) grade = 'A';
+          else if (totalMarks >= 60) grade = 'B+';
+          else if (totalMarks >= 50) grade = 'B';
+          else if (totalMarks >= 40) grade = 'C';
+          else if (totalMarks >= 35) grade = 'P';
+          else grade = 'F';
+
+          // Determine status based on mark availability and publication status
+          const hasAllMarks = r.internalMarks !== null && 
+                             r.midTermMarks !== null && 
+                             r.endTermMarks !== null;
+                             
+          const status = hasAllMarks && r.internalPublished && 
+                        r.midTermPublished && r.endTermPublished 
+                        ? 'published' : 'pending';
+
+          // Determine lastUpdated
+          let lastUpdated = '';
+          const times = [
+            (r as any).facultyPublishedAt,
+            (r as any).adminPublishedAt,
+            (r as any).updatedAt
+          ].filter(Boolean);
+          if (times.length > 0) {
+            const latest = times.reduce((a, b) => (a && b && a.seconds > b.seconds ? a : b));
+            lastUpdated = latest.toDate ? latest.toDate().toISOString() : '';
+          }
+
+          return {
+            ...r,
+            totalMarks: hasAllMarks ? totalMarks : null,
+            semester,
+            academicYear,
+            status,
+            lastUpdated,
+            grade: hasAllMarks ? grade : null,
+          };
+        });
+        setResults(mappedResults);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setResults([]);
+        setProfileData(null);
+      } finally {
+        setLoading(false);
       }
     };
-
     fetchData();
-    // Add currentUserUid as a dependency ONLY if NOT using dummy data always
-    // If USE_DUMMY_DATA is true, currentUserUid isn't needed for this effect's data fetching
-  }, [/* currentUserUid, */ USE_DUMMY_DATA]); // Added USE_DUMMY_DATA as dependency
-
+  }, [currentUserUid]);
 
   const groupResultsBySemester = (results: Result[]): SemesterGroup[] => {
     const grouped = results.reduce((acc, result) => {
@@ -434,8 +330,8 @@ const StudentResultPage = () => {
   const filteredResults = results.filter(result => {
     const matchesSemester = selectedSemester === 'all' || result.semester === selectedSemester;
     const matchesSearch = searchTerm === '' ||
-      result.subjectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      result.subjectCode.toLowerCase().includes(searchTerm.toLowerCase());
+      result.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      result.courseCode.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSemester && matchesSearch;
   });
 
