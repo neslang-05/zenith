@@ -1,13 +1,29 @@
 "use client";
 
-import React, { useState, ReactNode } from 'react';
+import React, { useState, ReactNode, useEffect } from 'react';
 import {
   Search, Mail, Phone, Calendar, Building, Users, Eye, Clock,
   FileText as LessonFileText, // Renamed for clarity if needed, or use FileText directly
   MoreVertical, Filter, Upload, Share, FileText,
   // --- Icons added for Assessments ---
-  BarChart2, AlertCircle, Check, X
+  BarChart2, AlertCircle, Check, X, PlusCircle
 } from 'lucide-react';
+import {
+  auth,
+  getStudentRegisteredCourses,
+  CourseData,
+  getAllCourses,
+  getUserProfile,
+  registerStudentForCourse
+} from '@/lib/firebase';
+import { deleteDoc, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+
+// Add this type definition near the top of the file, after the imports
+type StudentCourse = CourseData & { 
+  id: string;
+  isRegistered?: boolean;
+};
 
 // --- SHARED INTERFACES & COMPONENTS ---
 
@@ -131,8 +147,213 @@ const LessonCourseCard: React.FC<LessonCourseCardProps> = ({ title, progress, du
   </div>
 );
 const LessonsContent = () => {
-  const courses = [ { title: 'Data Structures & Algorithms', progress: 80, duration: '30 min', students: '100 students', type: 'Lesson', assignment: true }, { title: 'Computer Network', progress: 100, duration: '60 min', students: '102 students', type: 'Lesson', assignment: true }, { title: 'Computer Graphics', progress: 50, duration: '50 min', students: '120 students', type: 'Lesson', assignment: false }, { title: 'Operating System', progress: 60, duration: '20 min', students: '130 students', type: 'Lesson', assignment: true } ];
-  return (<><div className="mb-8 p-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg shadow-lg"><h1 className="text-3xl font-bold mb-2">Hello, Kurosaki <span className="text-yellow-300">👋</span></h1><p className="text-indigo-100">Nice to have you back. Get ready and continue your lessons today.</p></div><div className="mb-10"><div className="bg-white p-6 rounded-lg shadow-lg"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-semibold text-gray-800">Learning Activity</h2><div className="flex items-center text-sm text-gray-600"><div className="flex items-center mr-4"><span className="w-2.5 h-2.5 bg-purple-600 rounded-full mr-1.5"></span><span>Minutes</span></div><div className="flex items-center mr-4"><span className="w-2.5 h-2.5 bg-pink-500 rounded-full mr-1.5"></span><span>Exams</span></div><div className="text-gray-500">🗓️ Last Semester</div></div></div><div className="h-40 bg-gray-100 rounded-md flex items-center justify-center text-gray-400"><p>Learning Activity Chart Placeholder</p></div></div></div><h2 className="text-2xl font-bold text-gray-800 mb-6">Today's Courses</h2><div className="grid grid-cols-1 md:grid-cols-2 gap-6">{courses.map((course, index) => (<LessonCourseCard key={index} title={course.title} progress={course.progress} duration={course.duration} students={course.students} type={course.type} assignment={course.assignment} />))}</div></>);
+  const [courses, setCourses] = useState<StudentCourse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [registeringCourseId, setRegisteringCourseId] = useState<string | null>(null);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const [registrationSuccess, setRegistrationSuccess] = useState<string | null>(null);
+
+  const fetchCourses = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+      const [allCourses, registeredCourses] = await Promise.all([
+        getAllCourses(),
+        getStudentRegisteredCourses(user.uid)
+      ]);
+
+      // Mark courses as registered
+      const registeredCourseIds = new Set(registeredCourses.map(rc => rc.id));
+      const processedCourses = allCourses.map(course => ({
+        ...course,
+        isRegistered: registeredCourseIds.has(course.id)
+      }));
+
+      setCourses(processedCourses);
+    } catch (error: any) {
+      console.error('Error fetching courses:', error);
+      setError(error.message || 'Failed to fetch courses');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCourses();
+  }, []);
+
+  const handleRegister = async (courseId: string) => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    setRegisteringCourseId(courseId);
+    setRegistrationError(null);
+    setRegistrationSuccess(null);
+
+    try {
+      const userProfile = await getUserProfile(user.uid);
+      if (!userProfile) throw new Error('User profile not found');
+
+      await registerStudentForCourse(
+        courseId,
+        user.uid,
+        userProfile.name,
+        userProfile.registrationNumber
+      );
+
+      setRegistrationSuccess('Successfully registered for the course!');
+      await fetchCourses(); // Refresh the course list
+    } catch (error: any) {
+      setRegistrationError(error.message || 'Failed to register for course');
+    } finally {
+      setRegisteringCourseId(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-red-500 text-center p-4">
+        {error}
+      </div>
+    );
+  }
+
+  const registeredCourses = courses.filter(course => course.isRegistered);
+  const availableCourses = courses.filter(course => !course.isRegistered);
+
+  return (
+    <>
+      <div className="mb-8 p-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg shadow-lg">
+        <h1 className="text-3xl font-bold mb-2">My Courses <span className="text-yellow-300">📚</span></h1>
+        <p className="text-indigo-100">View your registered courses and discover new ones to enroll in.</p>
+      </div>
+
+      {registrationError && (
+        <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">
+          {registrationError}
+        </div>
+      )}
+      {registrationSuccess && (
+        <div className="mb-4 p-4 bg-green-100 text-green-700 rounded-lg">
+          {registrationSuccess}
+        </div>
+      )}
+
+      {/* Registered Courses Section */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold text-gray-800 mb-4">My Registered Courses</h2>
+        {registeredCourses.length === 0 ? (
+          <div className="text-center p-8 bg-white rounded-lg shadow">
+            <p className="text-gray-500 mb-4">You haven't registered for any courses yet.</p>
+            <p className="text-sm text-gray-400">Browse available courses below to get started.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {registeredCourses.map((course) => (
+              <div key={course.id} className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow">
+                <div className="flex mb-4 items-start">
+                  <div className="flex-grow">
+                    <h3 className="font-bold text-lg text-gray-800">{course.courseName}</h3>
+                    <p className="text-gray-500 text-sm">{course.courseCode}</p>
+                  </div>
+                  <div className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                    Registered
+                  </div>
+                </div>
+                
+                <div className="flex items-center mb-3 text-sm">
+                  <div className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full flex items-center mr-3">
+                    <span>{course.academicYear}</span>
+                  </div>
+                  {course.credits && (
+                    <div className="flex items-center text-gray-600">
+                      <span>{course.credits} credits</span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-between text-sm text-gray-600">
+                  <div className="flex items-center">
+                    <Users size={16} className="mr-1" />
+                    <span>Faculty: {course.facultyName}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Available Courses Section */}
+      <div>
+        <h2 className="text-2xl font-semibold text-gray-800 mb-4">Available Courses</h2>
+        {availableCourses.length === 0 ? (
+          <div className="text-center p-8 bg-white rounded-lg shadow">
+            <p className="text-gray-500">No new courses available for registration at the moment.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {availableCourses.map((course) => (
+              <div key={course.id} className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow">
+                <div className="flex mb-4 items-start">
+                  <div className="flex-grow">
+                    <h3 className="font-bold text-lg text-gray-800">{course.courseName}</h3>
+                    <p className="text-gray-500 text-sm">{course.courseCode}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center mb-3 text-sm">
+                  <div className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full flex items-center mr-3">
+                    <span>{course.academicYear}</span>
+                  </div>
+                  {course.credits && (
+                    <div className="flex items-center text-gray-600">
+                      <span>{course.credits} credits</span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+                  <div className="flex items-center">
+                    <Users size={16} className="mr-1" />
+                    <span>Faculty: {course.facultyName}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleRegister(course.id)}
+                  disabled={registeringCourseId === course.id}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  {registeringCourseId === course.id ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                      Registering...
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle size={16} className="mr-2" />
+                      Register for Course
+                    </>
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
 };
 
 // --- MATERIALS DASHBOARD SPECIFIC COMPONENTS ---

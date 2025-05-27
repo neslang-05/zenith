@@ -1,14 +1,17 @@
+// lib/firebase.ts
+
 import { initializeApp, FirebaseApp, getApps, getApp } from 'firebase/app';
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
     getAuth,
-    // Ensure this is imported for direct use/re-export
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     sendPasswordResetEmail,
     signOut,
     Auth,
     UserCredential,
-    onAuthStateChanged // Keep this for use in components
+    onAuthStateChanged,
+    User // Import User type
 } from 'firebase/auth';
 import {
     getFirestore,
@@ -20,89 +23,74 @@ import {
     query,
     where,
     getDocs,
-    serverTimestamp, // Use server timestamp for consistency
-    Timestamp, // Import Timestamp type if needed elsewhere
+    serverTimestamp,
+    Timestamp,
     Firestore,
     DocumentData,
+    updateDoc,
     DocumentReference,
     QuerySnapshot,
     limit,
-    orderBy // Optional for sorting
+    orderBy,
+    deleteDoc, // For potential future use
+    writeBatch // For batch operations
 } from 'firebase/firestore';
+import { sendWelcomeEmailToStudent, sendWelcomeEmailToFaculty, sendMarksPublishedEmail, sendCourseRegistrationEmail } from './emailService';
 
 //--- Environment Variables for Firebase Config (Recommended) ---
-
- const firebaseConfig = {
-     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY, // Access prefixed variable
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+const firebaseConfig = {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "YOUR_API_KEY",
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "YOUR_AUTH_DOMAIN",
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "YOUR_STORAGE_BUCKET",
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "YOUR_MESSAGING_SENDER_ID",
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "YOUR_APP_ID",
+    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "YOUR_MEASUREMENT_ID"
 };
+// Replace "YOUR_..." with your actual Firebase config values or ensure .env.local is set up
+// Fallbacks are provided for demonstration if .env variables are not found.
 
-// --- Initialize Firebase App (Singleton Pattern) ---
-// Check if Firebase App has already been initialized
-// Important for Next.js with Hot Module Replacement (HMR)
 let app: FirebaseApp;
 if (getApps().length === 0) {
     try {
         if (!firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId) {
-            throw new Error("Missing Firebase configuration. Check environment variables.");
+            throw new Error("Missing Firebase configuration. Check environment variables or hardcoded values.");
         }
         app = initializeApp(firebaseConfig);
         console.log("Firebase initialized.");
     } catch (error) {
         console.error('Firebase initialization error:', error);
-        throw new Error("Could not initialize Firebase. Please check configuration and environment variables.");
+        throw new Error("Could not initialize Firebase. Please check configuration.");
     }
 } else {
-    // If already initialized, use the existing app
     app = getApp();
-    // console.log("Firebase app already exists."); // Less noisy console
 }
 
-
-// --- Initialize Firebase Services ---
-// Ensure 'app' is valid before initializing services
 export const auth: Auth = getAuth(app);
 export const db: Firestore = getFirestore(app);
+export const storage = getStorage(app); // Initialize Firebase Storage
 
+// --- Authentication Functions (largely unchanged, but ensure createUserWithEmailAndPassword is exported) ---
+export { createUserWithEmailAndPassword, onAuthStateChanged, Timestamp, serverTimestamp }; // Export necessary items
 
-// --- Authentication Functions ---
-
-/**
- * [CUSTOM FUNCTION, e.g., for Admins] Registers a new user AUTHENTICATION account.
- * Profile creation is separate. Consider renaming if specific (e.g., registerAdminAuth).
- */
 export const registerWithEmailAndPassword = async (email: string, password: string): Promise<UserCredential> => {
     try {
-        // Directly uses the imported SDK function
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        return userCredential;
+        return await createUserWithEmailAndPassword(auth, email, password);
     } catch (error) {
         console.error("Firebase Auth registration error:", error);
-        throw error; // Re-throw for component handling
+        throw error;
     }
 };
 
-/**
- * [CUSTOM FUNCTION] Signs in a user AUTHENTICATION account. Profile fetching is separate.
- */
 export const signInWithEmail = async (email: string, password: string): Promise<UserCredential> => {
     try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        return userCredential;
+        return await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
         console.error("Firebase Auth sign-in error:", error);
         throw error;
     }
 };
 
-/**
- * [CUSTOM FUNCTION] Sends a password reset email.
- */
 export const resetPassword = async (email: string): Promise<void> => {
     try {
         await sendPasswordResetEmail(auth, email);
@@ -112,174 +100,127 @@ export const resetPassword = async (email: string): Promise<void> => {
     }
 };
 
-/**
- * [CUSTOM FUNCTION] Signs out the current user.
- */
 export const signOutUser = async (): Promise<void> => {
     try {
         await signOut(auth);
-    } catch (error) {
+    } catch (error)
+{
         console.error("Firebase sign out error:", error);
         throw error;
     }
 };
 
 
-// --- Firestore Functions ---
-
-/**
- * Creates or updates a user's profile document in Firestore.
- * Should be called after successful Auth registration/creation.
- * @param uid - The Firebase Auth User ID.
- * @param email - User's email.
- * @param role - 'admin' or 'student' or 'faculty'.
- * @param additionalData - Object containing role-specific data (e.g., { institutionName: 'MTU' } for admin, { name: 'John Doe', registrationNumber: '123' } for student).
- */
+// --- User Profile Functions ---
 export const createUserProfile = async (
     uid: string,
     email: string,
-    role: 'admin' | 'student' | 'faculty', // Added 'faculty'
+    role: 'admin' | 'student' | 'faculty',
     additionalData: Record<string, any> = {}
 ): Promise<void> => {
     try {
         const userDocRef = doc(db, 'users', uid);
         const profileData = {
-            uid, // Store uid in the document as well if needed for queries
+            uid,
             email,
             role,
-            createdAt: serverTimestamp(), // Track creation time
+            createdAt: serverTimestamp(),
             ...additionalData,
         };
-        await setDoc(userDocRef, profileData, { merge: true }); // Use merge: true to avoid overwriting accidentally
+        await setDoc(userDocRef, profileData, { merge: true });
         console.log(`User profile created/updated for UID: ${uid} with role: ${role}`);
+
+        // Send welcome email if requested
+        if (additionalData.sendWelcomeEmail) {
+            try {
+                if (role === 'student') {
+                    await sendWelcomeEmailToStudent(
+                        additionalData.name,
+                        email,
+                        additionalData.initialPassword
+                    );
+                } else if (role === 'faculty') {
+                    await sendWelcomeEmailToFaculty(
+                        additionalData.name,
+                        email,
+                        additionalData.initialPassword
+                    );
+                }
+                console.log(`Welcome email sent to ${email}`);
+            } catch (emailError) {
+                console.error("Error sending welcome email:", emailError);
+                // Don't throw here - we want the user creation to succeed even if email fails
+            }
+        }
     } catch (error) {
         console.error("Error creating/updating user profile:", error);
         throw error;
     }
 };
 
-/**
- * Fetches a user's profile data (including role) from Firestore.
- * @param uid - The Firebase Auth User ID.
- * @returns The user's profile data object or null if not found.
- */
 export const getUserProfile = async (uid: string): Promise<DocumentData | null> => {
     try {
         const userDocRef = doc(db, 'users', uid);
         const docSnap = await getDoc(userDocRef);
-        if (docSnap.exists()) {
-            return docSnap.data();
-        } else {
-            console.warn(`No profile found for UID: ${uid}`);
-            return null;
-        }
+        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
     } catch (error) {
         console.error("Error fetching user profile:", error);
         throw error;
     }
 };
 
-/**
- * Adds a result document to Firestore.
- * @param resultData - Object containing result details. Must include `studentUid`.
- */
-export const addResult = async (resultData: {
-    studentUid: string;
-    registrationNumber: string; // Denormalized for easier admin views
-    subjectName: string;
-    marks: number | string; // Allow grade strings like 'A+'
-    examName: string;
-    enteredBy: string; // Admin's UID
-    academicYear?: string; // Optional
-    subjectCode?: string; // Optional
-}): Promise<DocumentReference> => {
+export const updateUserProfile = async (
+    uid: string,
+    dataToUpdate: Partial<DocumentData>
+): Promise<void> => {
     try {
-        const resultsCollectionRef = collection(db, 'results');
-        const dataWithTimestamp = {
-            ...resultData,
-            timestamp: serverTimestamp(),
-        };
-        const docRef = await addDoc(resultsCollectionRef, dataWithTimestamp);
-        console.log("Result added with ID: ", docRef.id);
-        return docRef;
+        const userDocRef = doc(db, 'users', uid);
+        await updateDoc(userDocRef, { ...dataToUpdate, updatedAt: serverTimestamp() });
+        console.log(`User profile updated for UID: ${uid}`);
     } catch (error) {
-        console.error("Error adding result:", error);
+        console.error("Error updating user profile:", error);
         throw error;
     }
 };
 
-/**
- * Fetches all results for a specific student.
- * @param studentUid - The Firebase Auth UID of the student.
- * @returns An array of result data objects, including their Firestore document IDs.
- */
-export const getStudentResults = async (studentUid: string): Promise<(DocumentData & { id: string })[]> => {
-    try {
-        const resultsCollectionRef = collection(db, 'results');
-        // Query results where the studentUid field matches the logged-in student's UID
-        const q = query(
-            resultsCollectionRef,
-            where('studentUid', '==', studentUid),
-            orderBy('timestamp', 'desc') // Optional: Show newest results first
-        );
-        const querySnapshot = await getDocs(q);
-        const results: (DocumentData & { id: string })[] = [];
-        querySnapshot.forEach((doc) => {
-            results.push({ id: doc.id, ...doc.data() });
-        });
-        return results;
-    } catch (error) {
-        console.error("Error fetching student results:", error);
-        throw error;
-    }
+export const uploadProfileImage = async (uid: string, file: File): Promise<string> => {
+    const filePath = `profileImages/${uid}/${file.name}`;
+    const storageRef = ref(storage, filePath);
+    await uploadBytes(storageRef, file);
+    const photoURL = await getDownloadURL(storageRef);
+    await updateUserProfile(uid, { photoURL });
+    return photoURL;
 };
 
 
-/**
- * Finds a student user profile by their registration number. (Helper for Admin)
- * @param registrationNumber - The student's unique registration number.
- * @returns The student's profile data object (including UID via id field) or null if not found.
- */
+// --- Student Specific ---
 export const findStudentByRegNum = async (registrationNumber: string): Promise<(DocumentData & { id: string }) | null> => {
     try {
         const usersRef = collection(db, "users");
         const q = query(
             usersRef,
             where("role", "==", "student"),
-            where("registrationNumber", "==", registrationNumber),
-            limit(1) // Ensure only one result is returned
+            where("registrationNumber", "==", registrationNumber.toUpperCase()), // Ensure case-insensitivity if needed
+            limit(1)
         );
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
             const studentDoc = querySnapshot.docs[0];
-            return { id: studentDoc.id, ...studentDoc.data() }; // id is the UID here
-        } else {
-            return null; // No student found with that registration number
+            return { id: studentDoc.id, ...studentDoc.data() };
         }
+        return null;
     } catch (error) {
         console.error("Error finding student by registration number:", error);
         throw error;
     }
 };
 
-/**
- * Fetches all student user profiles. (Helper for Admin)
- * @returns An array of student profile data objects, including their Firestore document IDs (which are their UIDs).
- */
 export const getAllStudents = async (): Promise<(DocumentData & { id: string })[]> => {
     try {
         const usersRef = collection(db, 'users');
-        const q = query(
-            usersRef,
-            where('role', '==', 'student'),
-            orderBy('name', 'asc') // Optional: sort by name
-        );
+        const q = query(usersRef, where('role', '==', 'student'), orderBy('name', 'asc'));
         const querySnapshot = await getDocs(q);
-        const students: (DocumentData & { id: string })[] = [];
-        querySnapshot.forEach((doc) => {
-            students.push({ id: doc.id, ...doc.data() });
-        });
-        return students;
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
         console.error("Error fetching all students:", error);
         throw error;
@@ -287,15 +228,467 @@ export const getAllStudents = async (): Promise<(DocumentData & { id: string })[
 };
 
 
-// --- Export initialized services and specific SDK functions/types as needed ---
-export {
-    app,
-    onAuthStateChanged,
-    serverTimestamp,
-    Timestamp,
-    // --- Re-export the original SDK function for direct use ---
-    // This allows components like ManageStudentsPage to import and use it
-    // directly via `import { createUser... } from '../lib/firebase'`
-    createUserWithEmailAndPassword
+// --- Faculty Specific ---
+export const createFacultyProfile = async ( // Already existed, ensure it's used correctly
+    uid: string,
+    email: string,
+    additionalData: Record<string, any> = {}
+): Promise<void> => {
+    await createUserProfile(uid, email, 'faculty', additionalData);
 };
-// Note: Exporting `auth` and `db` directly above is usually preferred over default exports.
+
+export const getAllFaculty = async (): Promise<(DocumentData & { id: string })[]> => {
+    try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('role', '==', 'faculty'), orderBy('name', 'asc'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error("Error fetching all faculty:", error);
+        throw error;
+    }
+};
+
+// --- Course Management ---
+export interface CourseData {
+    courseName: string;
+    courseCode: string;
+    facultyUid: string;
+    facultyName: string; // Denormalized
+    academicYear: string;
+    description?: string;
+    credits?: number;
+    // any other course details
+}
+export const addCourse = async (courseData: CourseData): Promise<DocumentReference> => {
+    try {
+        const coursesCollectionRef = collection(db, 'courses');
+        const dataWithTimestamp = { ...courseData, createdAt: serverTimestamp() };
+        const docRef = await addDoc(coursesCollectionRef, dataWithTimestamp);
+        console.log("Course added with ID: ", docRef.id);
+        return docRef;
+    } catch (error) {
+        console.error("Error adding course:", error);
+        throw error;
+    }
+};
+
+export const getAllCourses = async (): Promise<(CourseData & { id: string })[]> => {
+    try {
+        const coursesRef = collection(db, 'courses');
+        const q = query(coursesRef, orderBy('createdAt', 'desc'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CourseData & { id: string }));
+    } catch (error) {
+        console.error("Error fetching all courses:", error);
+        throw error;
+    }
+};
+
+export const getCoursesByFaculty = async (facultyUid: string): Promise<(CourseData & { id: string })[]> => {
+    try {
+        const coursesRef = collection(db, 'courses');
+        const q = query(coursesRef, where('facultyUid', '==', facultyUid), orderBy('createdAt', 'desc'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CourseData & { id: string }));
+    } catch (error) {
+        console.error(`Error fetching courses for faculty ${facultyUid}:`, error);
+        throw error;
+    }
+};
+
+export const getCourseById = async (courseId: string): Promise<(CourseData & { id: string }) | null> => {
+    try {
+        const courseDocRef = doc(db, 'courses', courseId);
+        const docSnap = await getDoc(courseDocRef);
+        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as CourseData & { id: string } : null;
+    } catch (error) {
+        console.error(`Error fetching course ${courseId}:`, error);
+        throw error;
+    }
+};
+
+// --- Student Course Registration ---
+export const registerStudentForCourse = async (courseId: string, studentUid: string, studentName: string, registrationNumber: string): Promise<void> => {
+    try {
+        // Get course details first
+        const courseDoc = await getCourseById(courseId);
+        if (!courseDoc) throw new Error('Course not found');
+
+        // Get student email
+        const studentDoc = await getUserProfile(studentUid);
+        if (!studentDoc) throw new Error('Student not found');
+
+        // Store registration under course
+        const registrationDocRef = doc(db, 'courses', courseId, 'registrations', studentUid);
+        await setDoc(registrationDocRef, {
+            studentName, // Denormalize for easier display
+            registrationNumber, // Denormalize
+            registeredAt: serverTimestamp()
+        });
+
+        // Store registration under student (optional, for student's view)
+        const studentCourseRef = doc(db, 'users', studentUid, 'registeredCourses', courseId);
+        await setDoc(studentCourseRef, { registeredAt: serverTimestamp() });
+
+        // Send registration confirmation email
+        try {
+            await sendCourseRegistrationEmail(
+                studentDoc.email,
+                studentName,
+                courseDoc.courseName,
+                courseDoc.facultyName
+            );
+            console.log(`Course registration email sent to ${studentDoc.email}`);
+        } catch (emailError) {
+            console.error("Error sending course registration email:", emailError);
+            // Don't throw here - we want the registration to succeed even if email fails
+        }
+
+        console.log(`Student ${studentUid} registered for course ${courseId}`);
+    } catch (error) {
+        console.error("Error registering student for course:", error);
+        throw error;
+    }
+};
+
+export const getRegisteredStudentsForCourse = async (courseId: string): Promise<(DocumentData & { id: string })[]> => {
+    try {
+        const registrationsRef = collection(db, 'courses', courseId, 'registrations');
+        const q = query(registrationsRef, orderBy('registeredAt', 'desc'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); // id here is studentUid
+    } catch (error) {
+        console.error(`Error fetching registered students for course ${courseId}:`, error);
+        throw error;
+    }
+};
+
+export const getStudentRegisteredCourses = async (studentUid: string): Promise<(DocumentData & { id: string })[]> => {
+    try {
+        const registeredCoursesRef = collection(db, 'users', studentUid, 'registeredCourses');
+        const q = query(registeredCoursesRef, orderBy('registeredAt', 'desc'));
+        const querySnapshot = await getDocs(q);
+
+        const courseIds = querySnapshot.docs.map(doc => doc.id);
+        const courseDetailsPromises = courseIds.map(id => getCourseById(id));
+        const coursesWithDetails = (await Promise.all(courseDetailsPromises)).filter(c => c !== null);
+
+        return coursesWithDetails as (CourseData & { id: string })[];
+    } catch (error) {
+        console.error(`Error fetching registered courses for student ${studentUid}:`, error);
+        throw error;
+    }
+};
+
+export const isStudentRegistered = async (courseId: string, studentUid: string): Promise<boolean> => {
+    try {
+        const registrationDocRef = doc(db, 'courses', courseId, 'registrations', studentUid);
+        const docSnap = await getDoc(registrationDocRef);
+        return docSnap.exists();
+    } catch (error) {
+        console.error(`Error checking registration status for student ${studentUid} in course ${courseId}:`, error);
+        // Depending on rules, this might throw if document doesn't exist and read is denied.
+        // Safely assume not registered on error, or re-throw.
+        return false;
+    }
+};
+
+
+// --- Marks Management ---
+export interface MarksData {
+    internalMarks?: number | string | null;
+    midTermMarks?: number | string | null;
+    endTermMarks?: number | string | null;
+    internalPublished?: boolean;
+    midTermPublished?: boolean;
+    endTermPublished?: boolean;
+    lastUpdatedByFaculty?: string; // UID of faculty
+    facultyPublishedAt?: Timestamp;
+    lastUpdatedByAdmin?: string; // UID of admin for end-term
+    adminPublishedAt?: Timestamp;
+    grade?: string | null; // Overall grade if calculated
+}
+
+// Faculty adds/updates internal or mid-term marks
+export const upsertFacultyMarks = async (
+    courseId: string,
+    studentUid: string,
+    marks: { internalMarks?: number | string; midTermMarks?: number | string },
+    facultyUid: string
+): Promise<void> => {
+    try {
+        const marksDocRef = doc(db, 'courses', courseId, 'marks', studentUid);
+        const dataToUpdate: Partial<MarksData & { updatedAt: Timestamp }> = {
+            ...marks,
+            lastUpdatedByFaculty: facultyUid,
+            updatedAt: serverTimestamp() as Timestamp
+        };
+        await setDoc(marksDocRef, dataToUpdate, { merge: true });
+        console.log(`Faculty marks updated for student ${studentUid} in course ${courseId}`);
+    } catch (error) {
+        console.error("Error updating faculty marks:", error);
+        throw error;
+    }
+};
+
+// Faculty publishes internal or mid-term marks
+export const publishFacultyMarks = async (
+    courseId: string,
+    studentUid: string,
+    type: 'internal' | 'midTerm',
+    facultyUid: string
+): Promise<void> => {
+    try {
+        const marksDocRef = doc(db, 'courses', courseId, 'marks', studentUid);
+        const updateData: Partial<MarksData> = {
+            lastUpdatedByFaculty: facultyUid,
+            facultyPublishedAt: serverTimestamp() as Timestamp
+        };
+        if (type === 'internal') updateData.internalPublished = true;
+        if (type === 'midTerm') updateData.midTermPublished = true;
+
+        await updateDoc(marksDocRef, updateData);
+
+        // Get course and student details for email
+        const [courseDoc, studentDoc] = await Promise.all([
+            getCourseById(courseId),
+            getUserProfile(studentUid)
+        ]);
+
+        if (courseDoc && studentDoc) {
+            try {
+                await sendMarksPublishedEmail(
+                    studentDoc.email,
+                    studentDoc.name,
+                    courseDoc.courseName,
+                    type === 'internal' ? 'Internal' : 'Mid-Term'
+                );
+                console.log(`Marks published email sent to ${studentDoc.email}`);
+            } catch (emailError) {
+                console.error("Error sending marks published email:", emailError);
+                // Don't throw here - we want the marks publication to succeed even if email fails
+            }
+        }
+
+        console.log(`${type} marks published by faculty for student ${studentUid} in course ${courseId}`);
+    } catch (error) {
+        console.error("Error publishing faculty marks:", error);
+        throw error;
+    }
+};
+
+// Admin adds/updates end-term marks
+export const upsertAdminEndTermMarks = async (
+    courseId: string,
+    studentUid: string,
+    marks: { endTermMarks: number | string },
+    adminUid: string
+): Promise<void> => {
+    try {
+        const marksDocRef = doc(db, 'courses', courseId, 'marks', studentUid);
+        const dataToUpdate: Partial<MarksData & { updatedAt: Timestamp }> = {
+            ...marks,
+            lastUpdatedByAdmin: adminUid,
+            updatedAt: serverTimestamp() as Timestamp
+        };
+        await setDoc(marksDocRef, dataToUpdate, { merge: true });
+        console.log(`Admin end-term marks updated for student ${studentUid} in course ${courseId}`);
+    } catch (error) {
+        console.error("Error updating admin end-term marks:", error);
+        throw error;
+    }
+};
+
+// Admin publishes end-term marks
+export const publishAdminEndTermMarks = async (
+    courseId: string,
+    studentUid: string,
+    adminUid: string
+): Promise<void> => {
+    try {
+        const marksDocRef = doc(db, 'courses', courseId, 'marks', studentUid);
+        await updateDoc(marksDocRef, {
+            endTermPublished: true,
+            lastUpdatedByAdmin: adminUid,
+            adminPublishedAt: serverTimestamp()
+        });
+
+        // Get course and student details for email
+        const [courseDoc, studentDoc] = await Promise.all([
+            getCourseById(courseId),
+            getUserProfile(studentUid)
+        ]);
+
+        if (courseDoc && studentDoc) {
+            try {
+                await sendMarksPublishedEmail(
+                    studentDoc.email,
+                    studentDoc.name,
+                    courseDoc.courseName,
+                    'End-Term'
+                );
+                console.log(`End-term marks published email sent to ${studentDoc.email}`);
+            } catch (emailError) {
+                console.error("Error sending end-term marks published email:", emailError);
+                // Don't throw here - we want the marks publication to succeed even if email fails
+            }
+        }
+
+        console.log(`End-term marks published by admin for student ${studentUid} in course ${courseId}`);
+    } catch (error) {
+        console.error("Error publishing admin end-term marks:", error);
+        throw error;
+    }
+};
+
+// Get all marks for a student in a specific course
+export const getStudentMarksForCourse = async (courseId: string, studentUid: string): Promise<(MarksData & { id: string }) | null> => {
+    try {
+        const marksDocRef = doc(db, 'courses', courseId, 'marks', studentUid);
+        const docSnap = await getDoc(marksDocRef);
+        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as MarksData & { id: string } : null;
+    } catch (error) {
+        console.error(`Error fetching marks for student ${studentUid} in course ${courseId}:`, error);
+        throw error;
+    }
+};
+
+// Get all marks for all students in a specific course (for faculty/admin view)
+export const getAllMarksForCourse = async (courseId: string): Promise<(MarksData & { studentUid: string })[]> => {
+    try {
+        const marksCollectionRef = collection(db, 'courses', courseId, 'marks');
+        const querySnapshot = await getDocs(marksCollectionRef);
+        return querySnapshot.docs.map(doc => ({ studentUid: doc.id, ...doc.data() } as MarksData & { studentUid: string }));
+    } catch (error) {
+        console.error(`Error fetching all marks for course ${courseId}:`, error);
+        throw error;
+    }
+};
+
+// --- Generic Result Management (Old system, can be deprecated or adapted) ---
+// This was the `addResult` from the original problem. It's less structured than the new course-based marks.
+// You might want to migrate data from this system or adapt its UI if it's still needed.
+export interface GenericResultData {
+    studentUid: string;
+    registrationNumber: string;
+    subjectName: string;
+    marks: number | string;
+    examName: string;
+    enteredBy: string; // Admin's UID
+    academicYear?: string;
+    subjectCode?: string;
+    timestamp?: Timestamp;
+}
+
+export const addGenericResult = async (resultData: Omit<GenericResultData, 'timestamp'>): Promise<DocumentReference> => {
+    try {
+        const resultsCollectionRef = collection(db, 'genericResults'); // Use a different collection name
+        const dataWithTimestamp = { ...resultData, timestamp: serverTimestamp() };
+        const docRef = await addDoc(resultsCollectionRef, dataWithTimestamp);
+        console.log("Generic Result added with ID: ", docRef.id);
+        return docRef;
+    } catch (error) {
+        console.error("Error adding generic result:", error);
+        throw error;
+    }
+};
+
+export const getStudentGenericResults = async (studentUid: string): Promise<(GenericResultData & { id: string })[]> => {
+    try {
+        const resultsCollectionRef = collection(db, 'genericResults');
+        const q = query(resultsCollectionRef, where('studentUid', '==', studentUid), orderBy('timestamp', 'desc'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GenericResultData & { id: string }));
+    } catch (error) {
+        console.error("Error fetching student generic results:", error);
+        throw error;
+    }
+};
+
+// --- Student Results ---
+export interface StudentResult extends DocumentData {
+    id: string;
+    courseId: string;
+    courseName: string;
+    courseCode: string;
+    internalMarks?: number | null;
+    midTermMarks?: number | null;
+    endTermMarks?: number | null;
+    internalPublished?: boolean;
+    midTermPublished?: boolean;
+    endTermPublished?: boolean;
+    grade?: string | null;
+}
+
+export const getStudentResults = async (studentUid: string): Promise<StudentResult[]> => {
+    try {
+        // First get all courses the student is registered for
+        const registeredCoursesRef = collection(db, 'users', studentUid, 'registeredCourses');
+        const registeredCoursesSnap = await getDocs(registeredCoursesRef);
+        
+        // For each course, get the student's marks
+        const resultsPromises = registeredCoursesSnap.docs.map(async (courseDoc) => {
+            const courseId = courseDoc.id;
+            const marksRef = doc(db, 'courses', courseId, 'marks', studentUid);
+            const marksSnap = await getDoc(marksRef);
+            
+            // Get course details
+            const courseRef = doc(db, 'courses', courseId);
+            const courseSnap = await getDoc(courseRef);
+            const courseData = courseSnap.data() as CourseData | undefined;
+            
+            if (marksSnap.exists() && courseData) {
+                return {
+                    id: marksSnap.id,
+                    courseId,
+                    courseName: courseData.courseName,
+                    courseCode: courseData.courseCode,
+                    ...marksSnap.data()
+                } as StudentResult;
+            }
+            return null;
+        });
+        
+        const results = await Promise.all(resultsPromises);
+        return results.filter((result): result is StudentResult => result !== null);
+    } catch (error) {
+        console.error("Error fetching student results:", error);
+        throw error;
+    }
+};
+
+// --- Admin User Creation Functions ---
+export const createNewUserWithoutSigningOut = async (
+    email: string,
+    password: string,
+    role: 'student' | 'faculty',
+    additionalData: Record<string, any> = {}
+): Promise<void> => {
+    try {
+        // Create a new auth instance for user creation
+        const tempAuth = getAuth(initializeApp(firebaseConfig, 'tempAuth'));
+        
+        // Create the user with the temporary auth instance
+        const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
+        const newUser = userCredential.user;
+
+        // Create the user profile
+        if (role === 'student') {
+            await createUserProfile(newUser.uid, email, 'student', additionalData);
+        } else {
+            await createFacultyProfile(newUser.uid, email, additionalData);
+        }
+
+        // Delete the temporary app instance
+        await tempAuth.signOut();
+
+        console.log(`New ${role} created successfully with UID: ${newUser.uid}`);
+    } catch (error) {
+        console.error(`Error creating new ${role}:`, error);
+        throw error;
+    }
+};
+
+// Ensure `app` is also exported if needed directly, though usually not.
+export { app };
