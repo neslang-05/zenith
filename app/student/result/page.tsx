@@ -239,33 +239,33 @@ const StudentResultPage = () => {
           const semester = (r as any).semester || 0;
           const academicYear = (r as any).academicYear || '';
 
-          // Always calculate totalMarks if any marks are present
-          const internal = typeof r.internalMarks === 'number' ? r.internalMarks : 0;
-          const midTerm = typeof r.midTermMarks === 'number' ? r.midTermMarks : 0;
-          const endTerm = typeof r.endTermMarks === 'number' ? r.endTermMarks : 0;
+          // Ensure marks are numbers
+          const internal = r.internalMarks !== null && r.internalMarks !== undefined ? Number(r.internalMarks) : null;
+          const midTerm = r.midTermMarks !== null && r.midTermMarks !== undefined ? Number(r.midTermMarks) : null;
+          const endTerm = r.endTermMarks !== null && r.endTermMarks !== undefined ? Number(r.endTermMarks) : null;
           
-          // Calculate total marks
-          const totalMarks = internal + midTerm + endTerm;
+          // Calculate total marks only if all components are available
+          let totalMarks: number | null = null;
+          if (internal !== null && midTerm !== null && endTerm !== null) {
+            totalMarks = internal + midTerm + endTerm;
+          }
 
-          // Always calculate grade based on total marks
-          let grade = '';
-          if (totalMarks >= 90) grade = 'O';
-          else if (totalMarks >= 80) grade = 'A+';
-          else if (totalMarks >= 70) grade = 'A';
-          else if (totalMarks >= 60) grade = 'B+';
-          else if (totalMarks >= 50) grade = 'B';
-          else if (totalMarks >= 40) grade = 'C';
-          else if (totalMarks >= 35) grade = 'P';
-          else grade = 'F';
+          // Calculate grade based on total marks
+          let grade: string | null = null;
+          if (totalMarks !== null) {
+            if (totalMarks >= 90) grade = 'A+';
+            else if (totalMarks >= 80) grade = 'A';
+            else if (totalMarks >= 70) grade = 'B+';
+            else if (totalMarks >= 60) grade = 'B';
+            else if (totalMarks >= 50) grade = 'C';
+            else if (totalMarks >= 40) grade = 'D';
+            else if (totalMarks < 40) grade = 'F';
+          }
 
           // Determine status based on mark availability and publication status
-          const hasAllMarks = r.internalMarks !== null && 
-                             r.midTermMarks !== null && 
-                             r.endTermMarks !== null;
-                             
-          const status = hasAllMarks && r.internalPublished && 
-                        r.midTermPublished && r.endTermPublished 
-                        ? 'published' : 'pending';
+          const hasAllMarks = internal !== null && midTerm !== null && endTerm !== null;
+          const isPublished = r.internalPublished && r.midTermPublished && r.endTermPublished;
+          const status = hasAllMarks && isPublished ? 'published' : 'pending';
 
           // Determine lastUpdated
           let lastUpdated = '';
@@ -281,12 +281,12 @@ const StudentResultPage = () => {
 
           return {
             ...r,
-            totalMarks: hasAllMarks ? totalMarks : null,
+            totalMarks,
             semester,
             academicYear,
             status,
             lastUpdated,
-            grade: hasAllMarks ? grade : null,
+            grade
           };
         });
         setResults(mappedResults);

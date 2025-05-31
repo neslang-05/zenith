@@ -21,6 +21,8 @@ import {
     findStudentByRegNum, // if needed for specific search
     getUserProfile,
     createNewUserWithoutSigningOut,
+    updateUserProfile,
+    uploadProfileImage,
 } from '@/lib/firebase'; // Relative path to lib
 import { User } from 'firebase/auth';
 import { DocumentData, Timestamp } from 'firebase/firestore';
@@ -30,6 +32,11 @@ import {
     Moon, Sun, Users2, Library, ClipboardList, Bell, PlusCircle, UploadCloud, DownloadCloud,
     FileText, Search, Edit3, Trash2, Eye, EyeOff, CheckCircle, XCircle, Send, Save, BookUser, UserPlus, Check, X, Home
 } from 'lucide-react';
+
+import CollaboratorsSettings from '@/components/CollaboratorsSettings';
+import AdminAssignmentSettings from '@/components/AdminAssignmentSettings';
+import InstitutionStructureSettings from '@/components/InstitutionStructureSettings';
+import BulkUserUploadSettings from '@/components/BulkUserUploadSettings';
 
 // Simple Loading Spinner Component
 const LoadingSpinner = ({ size = 'h-5 w-5', color = 'border-indigo-500' }: { size?: string, color?: string }) => (
@@ -47,22 +54,285 @@ const navItems: NavItem[] = [
     { name: 'Student Management', icon: Users, pageKey: 'studentManagement' },
     { name: 'Faculty Management', icon: BookUser, pageKey: 'facultyManagement' },
     { name: 'Course & Marks Admin', icon: BookOpen, pageKey: 'courseMarksAdmin' },
-    // { name: 'Result Analytics', icon: BarChart3, pageKey: 'resultAnalytics' }, // Placeholder
-    // { name: 'System Settings', icon: Settings, pageKey: 'systemSettings' }, // Placeholder
+    { name: 'System Settings', icon: Settings, pageKey: 'systemSettings' },
 ];
 
 
 // --- Content Components ---
 
-// --- DashboardContent (Placeholder - can be expanded) ---
-const DashboardContent = () => (
-    <div>
-        <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200">Admin Dashboard</h2>
-        <p className="text-gray-500 dark:text-gray-400">Overview of the system.</p>
-        {/* Add summary cards, charts, etc. here */}
+// --- DashboardContent (Enhanced) ---
+const DashboardContent = () => {
+    // Placeholder: Replace with real data fetching logic
+    const [summary, setSummary] = useState({
+        students: 0,
+        faculty: 0,
+        courses: 0,
+        departments: 0,
+    });
+    const [recentActivities, setRecentActivities] = useState([
+        { type: 'registration', user: 'John Doe', role: 'Student', time: '2 min ago' },
+        { type: 'course', course: 'Math 101', action: 'created', by: 'Dr. Smith', time: '10 min ago' },
+    ]);
+    // Simulate fetching summary data
+    useEffect(() => {
+        // TODO: Replace with real API calls
+        setSummary({ students: 120, faculty: 15, courses: 32, departments: 5 });
+    }, []);
+    return (
+        <div>
+            <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200 mb-6">Admin Dashboard</h2>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <SummaryCard title="Total Students" value={summary.students} icon={<Users size={28} className="text-indigo-600" />} />
+                <SummaryCard title="Total Faculty" value={summary.faculty} icon={<BookUser size={28} className="text-green-600" />} />
+                <SummaryCard title="Courses" value={summary.courses} icon={<BookOpen size={28} className="text-blue-600" />} />
+                <SummaryCard title="Departments" value={summary.departments} icon={<Library size={28} className="text-yellow-600" />} />
+            </div>
+            {/* Quick Links */}
+            <div className="flex flex-wrap gap-4 mb-8">
+                <QuickLink href="#" label="Add Student" icon={<UserPlus size={18} />} />
+                <QuickLink href="#" label="Add Faculty" icon={<UserPlus size={18} />} />
+                <QuickLink href="#" label="Add Course" icon={<PlusCircle size={18} />} />
+                <QuickLink href="#" label="System Settings" icon={<Settings size={18} />} />
+            </div>
+            {/* Recent Activity Log */}
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Recent Activity</h3>
+                <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {recentActivities.map((activity, idx) => (
+                        <li key={idx} className="py-2 text-sm text-gray-600 dark:text-gray-300">
+                            {activity.type === 'registration' && (
+                                <span><b>{activity.user}</b> registered as <b>{activity.role}</b> <span className="text-xs text-gray-400 ml-2">{activity.time}</span></span>
+                            )}
+                            {activity.type === 'course' && (
+                                <span>Course <b>{activity.course}</b> {activity.action} by <b>{activity.by}</b> <span className="text-xs text-gray-400 ml-2">{activity.time}</span></span>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        </div>
+    );
+};
+
+// --- SummaryCard Component ---
+const SummaryCard = ({ title, value, icon }: { title: string, value: number, icon: React.ReactNode }) => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow flex items-center gap-4">
+        <div>{icon}</div>
+        <div>
+            <div className="text-lg font-semibold text-gray-700 dark:text-gray-200">{value}</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">{title}</div>
+        </div>
     </div>
 );
 
+// --- QuickLink Component ---
+const QuickLink = ({ href, label, icon }: { href: string, label: string, icon: React.ReactNode }) => (
+    <a href={href} className="inline-flex items-center px-4 py-2 bg-indigo-50 dark:bg-gray-700 text-indigo-700 dark:text-indigo-200 rounded-md shadow-sm hover:bg-indigo-100 dark:hover:bg-gray-600 transition-colors text-sm font-medium">
+        {icon}
+        <span className="ml-2">{label}</span>
+    </a>
+);
+
+// --- SystemSettingsContent (Modular with Tabs) ---
+const settingsTabs = [
+    { key: 'institute', label: 'Institute Details' },
+    { key: 'collaborators', label: 'Collaborators' },
+    { key: 'adminAssignment', label: 'Admin Assignment' },
+    { key: 'structure', label: 'Institution Structure' },
+    { key: 'bulkUpload', label: 'Bulk User Upload' },
+];
+
+const SystemSettingsContent = ({ adminUid }: { adminUid: string }) => {
+    const [activeTab, setActiveTab] = useState(settingsTabs[0].key);
+    return (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+            <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200 mb-4">System Settings</h2>
+            <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    {settingsTabs.map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-150 ${activeTab === tab.key ? 'border-indigo-600 text-indigo-700 dark:text-indigo-300' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-indigo-700 dark:hover:text-indigo-200'}`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </nav>
+            </div>
+            <div>
+                {activeTab === 'institute' && <InstituteDetailsSettings adminUid={adminUid} />}
+                {activeTab === 'collaborators' && <CollaboratorsSettings />}
+                {activeTab === 'adminAssignment' && <AdminAssignmentSettings />}
+                {activeTab === 'structure' && <InstitutionStructureSettings />}
+                {activeTab === 'bulkUpload' && <BulkUserUploadSettings />}
+            </div>
+        </div>
+    );
+};
+
+// --- Placeholder Components for Each Tab ---
+const InstituteDetailsSettings = ({ adminUid }: { adminUid: string }) => {
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+    const [logoUploading, setLogoUploading] = useState(false);
+    const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    const [form, setForm] = useState({
+        institutionName: '',
+        address: '',
+        contactNumber: '',
+        photoURL: '',
+    });
+    const [profileLoaded, setProfileLoaded] = useState(false);
+    useEffect(() => {
+        async function fetchProfile() {
+            setLoading(true);
+            setError(null);
+            try {
+                if (!adminUid) {
+                    setError('Admin UID not found.');
+                    setLoading(false);
+                    return;
+                }
+                const profile = await getUserProfile(adminUid);
+                if (!profile) throw new Error('Profile not found');
+                setForm({
+                    institutionName: profile.institutionName || '',
+                    address: profile.address || '',
+                    contactNumber: profile.contactNumber || '',
+                    photoURL: profile.photoURL || '',
+                });
+                setLogoPreview(profile.photoURL || null);
+                setProfileLoaded(true);
+            } catch (err: any) {
+                setError(err.message || 'Failed to load institute details.');
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchProfile();
+    }, [adminUid]);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        setForm(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const file = e.target.files[0];
+        setLogoUploading(true);
+        setError(null);
+        setSuccess(null);
+        try {
+            if (!adminUid) throw new Error('Admin UID not found.');
+            // Preview
+            const reader = new FileReader();
+            reader.onloadend = () => setLogoPreview(reader.result as string);
+            reader.readAsDataURL(file);
+            // Upload
+            const url = await uploadProfileImage(adminUid, file);
+            setForm(prev => ({ ...prev, photoURL: url }));
+            setSuccess('Logo uploaded successfully!');
+        } catch (err: any) {
+            setError(err.message || 'Failed to upload logo.');
+        } finally {
+            setLogoUploading(false);
+        }
+    };
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaving(true);
+        setError(null);
+        setSuccess(null);
+        try {
+            if (!adminUid) throw new Error('Admin UID not found.');
+            await updateUserProfile(adminUid, {
+                institutionName: form.institutionName,
+                address: form.address,
+                contactNumber: form.contactNumber,
+                photoURL: form.photoURL,
+            });
+            setSuccess('Institute details updated successfully!');
+        } catch (err: any) {
+            setError(err.message || 'Failed to update details.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) return <div className="py-8 text-center text-gray-500 dark:text-gray-300">Loading institute details...</div>;
+    return (
+        <form className="max-w-xl mx-auto space-y-6" onSubmit={handleSave}>
+            <h3 className="text-xl font-semibold mb-2">Institute Details</h3>
+            {error && <div className="p-3 bg-red-100 text-red-700 rounded-md text-sm">{error}</div>}
+            {success && <div className="p-3 bg-green-100 text-green-700 rounded-md text-sm">{success}</div>}
+            <div>
+                <label className="block text-sm font-medium mb-1">Institute Name <span className="text-red-500">*</span></label>
+                <input
+                    type="text"
+                    name="institutionName"
+                    value={form.institutionName}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white"
+                />
+            </div>
+            <div>
+                <label className="block text-sm font-medium mb-1">Address</label>
+                <textarea
+                    name="address"
+                    value={form.address}
+                    onChange={handleInputChange}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white"
+                />
+            </div>
+            <div>
+                <label className="block text-sm font-medium mb-1">Contact Number</label>
+                <input
+                    type="text"
+                    name="contactNumber"
+                    value={form.contactNumber}
+                    onChange={handleInputChange}
+                    maxLength={15}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white"
+                />
+            </div>
+            <div>
+                <label className="block text-sm font-medium mb-1">Institute Logo</label>
+                <div className="flex items-center gap-4">
+                    {logoPreview ? (
+                        <img src={logoPreview} alt="Logo Preview" className="h-16 w-16 object-contain rounded bg-gray-100 dark:bg-gray-700 border" />
+                    ) : (
+                        <div className="h-16 w-16 flex items-center justify-center bg-gray-100 dark:bg-gray-700 border rounded text-gray-400">No Logo</div>
+                    )}
+                    <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoChange}
+                        disabled={logoUploading}
+                        className="block text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                    />
+                    {logoUploading && <span className="text-xs text-gray-500 ml-2">Uploading...</span>}
+                </div>
+            </div>
+            <div>
+                <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                >
+                    {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+            </div>
+        </form>
+    );
+};
 
 // --- StudentManagementContent ---
 const StudentManagementContent = () => {
@@ -668,6 +938,7 @@ export default function ConsolePage() {
             case 'studentManagement': return <StudentManagementContent />;
             case 'facultyManagement': return <FacultyManagementContent />;
             case 'courseMarksAdmin': return <CourseMarksAdminContent adminUser={currentUser} />;
+            case 'systemSettings': return <SystemSettingsContent adminUid={currentUser.uid} />;
             default: return <GenericContent pageName={navItems.find(item => item.pageKey === activePageKey)?.name || 'Page'} />;
         }
     };

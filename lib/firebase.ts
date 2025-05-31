@@ -690,5 +690,80 @@ export const createNewUserWithoutSigningOut = async (
     }
 };
 
+// Get all users (students, faculty, admins)
+export const getAllUsers = async (): Promise<{ id: string; name?: string; email: string; role: string }[]> => {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, orderBy('name', 'asc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+};
+
+// Get all admins
+export const getAllAdmins = async (): Promise<{ id: string; name?: string; email: string; role: string }[]> => {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('role', '==', 'admin'), orderBy('name', 'asc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+};
+
+// --- Institution Structure Management ---
+// Departments
+export const getDepartments = async () => {
+  const ref = collection(db, 'departments');
+  const snap = await getDocs(ref);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+export const addDepartment = async (name: string) => {
+  const ref = collection(db, 'departments');
+  const docRef = await addDoc(ref, { name });
+  return docRef.id;
+};
+export const updateDepartment = async (id: string, name: string) => {
+  const ref = doc(db, 'departments', id);
+  await updateDoc(ref, { name });
+};
+export const deleteDepartment = async (id: string) => {
+  const ref = doc(db, 'departments', id);
+  await deleteDoc(ref);
+};
+// Semesters (subcollection)
+export const getSemesters = async (departmentId: string) => {
+  const ref = collection(db, 'departments', departmentId, 'semesters');
+  const snap = await getDocs(ref);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+export const addSemester = async (departmentId: string, name: string) => {
+  const ref = collection(db, 'departments', departmentId, 'semesters');
+  const docRef = await addDoc(ref, { name });
+  return docRef.id;
+};
+export const updateSemester = async (departmentId: string, semesterId: string, name: string) => {
+  const ref = doc(db, 'departments', departmentId, 'semesters', semesterId);
+  await updateDoc(ref, { name });
+};
+export const deleteSemester = async (departmentId: string, semesterId: string) => {
+  const ref = doc(db, 'departments', departmentId, 'semesters', semesterId);
+  await deleteDoc(ref);
+};
+// Courses (subcollection)
+export const getCourses = async (departmentId: string, semesterId: string) => {
+  const ref = collection(db, 'departments', departmentId, 'semesters', semesterId, 'courses');
+  const snap = await getDocs(ref);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+export const addCourseToSemester = async (departmentId: string, semesterId: string, course: { name: string; code: string }) => {
+  const ref = collection(db, 'departments', departmentId, 'semesters', semesterId, 'courses');
+  const docRef = await addDoc(ref, course);
+  return docRef.id;
+};
+export const updateCourseInSemester = async (departmentId: string, semesterId: string, courseId: string, course: { name: string; code: string }) => {
+  const ref = doc(db, 'departments', departmentId, 'semesters', semesterId, 'courses', courseId);
+  await updateDoc(ref, course);
+};
+export const deleteCourseInSemester = async (departmentId: string, semesterId: string, courseId: string) => {
+  const ref = doc(db, 'departments', departmentId, 'semesters', semesterId, 'courses', courseId);
+  await deleteDoc(ref);
+};
+
 // Ensure `app` is also exported if needed directly, though usually not.
 export { app };

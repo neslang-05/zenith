@@ -67,7 +67,7 @@ const AdminSignUpPage = () => { // Renamed component for clarity
 
       // Optional: Redirect after some time
       setTimeout(() => {
-        router.push('/login'); // Redirect to login after successful registration
+        router.push('/admin/console/settings'); // Redirect to System Settings after successful registration
       }, 4000); // Increased delay to allow reading the success message
 
     } catch (err) {
