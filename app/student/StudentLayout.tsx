@@ -7,7 +7,8 @@ import {
   Search, LogOut, Settings, User, BookOpen, BarChart, Briefcase, ClipboardList, Menu, ChevronLeft, Sun, Moon, Home
 } from 'lucide-react';
 import { auth, signOutUser, onAuthStateChanged, getUserProfile } from '@/lib/firebase';
-import { DocumentData, User as FirebaseUser } from 'firebase/auth'; // Renamed User
+import { User as FirebaseUser } from 'firebase/auth'; // Renamed User
+import { DocumentData } from 'firebase/firestore'; // Import DocumentData from firestore
 import Image from 'next/image'; // For logo
 
 // Loading Spinner
@@ -132,7 +133,7 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
     { iconElement: <Home size={22} />, label: 'Dashboard', href: '/student' },
     { iconElement: <User size={22} />, label: 'My Profile', href: '/student/profile' },
     { iconElement: <BookOpen size={22} />, label: 'Courses', href: '/student?view=courses' },
-    { iconElement: <ClipboardList size={22} />, label: 'My Marks', href: '/student?view=marks' },
+    { iconElement: <ClipboardList size={22} />, label: 'My Marks', href: '/student/result' },// /student/result changed from /student/?view=result
     // { iconElement: <Briefcase size={22} />, label: 'Materials', href: '/student?view=materials' }, // From original
     // { iconElement: <BarChart size={22} />, label: 'Results (Legacy)', href: '/student/result' }, // Keep legacy or integrate
     { iconElement: <Settings size={22} />, label: 'Settings', href: '/student/setting' },

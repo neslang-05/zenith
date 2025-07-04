@@ -23,6 +23,7 @@ import {
     createNewUserWithoutSigningOut,
     updateUserProfile,
     uploadProfileImage,
+    getDepartments,
 } from '@/lib/firebase'; // Relative path to lib
 import { User } from 'firebase/auth';
 import { DocumentData, Timestamp } from 'firebase/firestore';
@@ -33,10 +34,7 @@ import {
     FileText, Search, Edit3, Trash2, Eye, EyeOff, CheckCircle, XCircle, Send, Save, BookUser, UserPlus, Check, X, Home
 } from 'lucide-react';
 
-import CollaboratorsSettings from '@/components/CollaboratorsSettings';
-import AdminAssignmentSettings from '@/components/AdminAssignmentSettings';
 import InstitutionStructureSettings from '@/components/InstitutionStructureSettings';
-import BulkUserUploadSettings from '@/components/BulkUserUploadSettings';
 
 // Simple Loading Spinner Component
 const LoadingSpinner = ({ size = 'h-5 w-5', color = 'border-indigo-500' }: { size?: string, color?: string }) => (
@@ -57,27 +55,130 @@ const navItems: NavItem[] = [
     { name: 'System Settings', icon: Settings, pageKey: 'systemSettings' },
 ];
 
+// Add these type definitions
+interface Student extends DocumentData {
+    id: string;
+    name: string;
+    createdAt?: Timestamp;
+}
+
+interface Course extends CourseData {
+    id: string;
+    createdAt?: Timestamp;
+}
+
+interface Department extends DocumentData {
+    id: string;
+    name: string;
+}
+
+interface RegistrationActivity {
+    type: 'registration';
+    user: string;
+    role: string;
+    time: string;
+}
+
+interface CourseActivity {
+    type: 'course';
+    course: string;
+    action: string;
+    by: string;
+    time: string;
+}
+
+type Activity = RegistrationActivity | CourseActivity;
 
 // --- Content Components ---
 
 // --- DashboardContent (Enhanced) ---
 const DashboardContent = () => {
-    // Placeholder: Replace with real data fetching logic
     const [summary, setSummary] = useState({
         students: 0,
         faculty: 0,
         courses: 0,
         departments: 0,
     });
-    const [recentActivities, setRecentActivities] = useState([
-        { type: 'registration', user: 'John Doe', role: 'Student', time: '2 min ago' },
-        { type: 'course', course: 'Math 101', action: 'created', by: 'Dr. Smith', time: '10 min ago' },
-    ]);
-    // Simulate fetching summary data
+    const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
+    const [loading, setLoading] = useState(true);
+
     useEffect(() => {
-        // TODO: Replace with real API calls
-        setSummary({ students: 120, faculty: 15, courses: 32, departments: 5 });
+        const fetchDashboardData = async () => {
+            try {
+                // Fetch all required data in parallel
+                const [students, faculty, courses, departments] = await Promise.all([
+                    getAllStudents(),
+                    getAllFaculty(),
+                    getAllCourses(),
+                    getDepartments()
+                ]);
+
+                // Update summary with real data
+                setSummary({
+                    students: students.length,
+                    faculty: faculty.length,
+                    courses: courses.length,
+                    departments: departments.length,
+                });
+
+                // Create recent activities from the latest data
+                const activities: Activity[] = [];
+                
+                // Add latest student registrations
+                if (students.length > 0) {
+                    const latestStudents = students.slice(0, 3);
+                    activities.push(...latestStudents.map((student: DocumentData & { id: string }) => {
+                        const studentData = student as Student;
+                        return {
+                            type: 'registration' as const,
+                            user: studentData.name || 'Unknown Student',
+                            role: 'Student',
+                            time: studentData.createdAt ? new Date(studentData.createdAt.toDate()).toLocaleString() : 'N/A'
+                        };
+                    }));
+                }
+
+                // Add latest course creations
+                if (courses.length > 0) {
+                    const latestCourses = courses.slice(0, 3);
+                    activities.push(...latestCourses.map((course: DocumentData & { id: string }) => {
+                        const courseData = course as Course;
+                        return {
+                            type: 'course' as const,
+                            course: courseData.courseName,
+                            action: 'created',
+                            by: courseData.facultyName || 'Faculty',
+                            time: courseData.createdAt ? new Date(courseData.createdAt.toDate()).toLocaleString() : 'N/A'
+                        };
+                    }));
+                }
+
+                // Sort activities by timestamp (most recent first)
+                activities.sort((a, b) => {
+                    const timeA = a.time === 'N/A' ? 0 : new Date(a.time).getTime();
+                    const timeB = b.time === 'N/A' ? 0 : new Date(b.time).getTime();
+                    return timeB - timeA;
+                });
+
+                setRecentActivities(activities.slice(0, 5)); // Show only 5 most recent activities
+            } catch (error) {
+                console.error("Error fetching dashboard data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchDashboardData();
     }, []);
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <LoadingSpinner size="h-8 w-8" />
+            </div>
+        );
+    }
+
     return (
         <div>
             <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200 mb-6">Admin Dashboard</h2>
@@ -96,19 +197,23 @@ const DashboardContent = () => {
                 <QuickLink href="#" label="System Settings" icon={<Settings size={18} />} />
             </div>
             {/* Recent Activity Log */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+            <div>
                 <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">Recent Activity</h3>
                 <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {recentActivities.map((activity, idx) => (
-                        <li key={idx} className="py-2 text-sm text-gray-600 dark:text-gray-300">
-                            {activity.type === 'registration' && (
-                                <span><b>{activity.user}</b> registered as <b>{activity.role}</b> <span className="text-xs text-gray-400 ml-2">{activity.time}</span></span>
-                            )}
-                            {activity.type === 'course' && (
-                                <span>Course <b>{activity.course}</b> {activity.action} by <b>{activity.by}</b> <span className="text-xs text-gray-400 ml-2">{activity.time}</span></span>
-                            )}
-                        </li>
-                    ))}
+                    {recentActivities.length > 0 ? (
+                        recentActivities.map((activity, idx) => (
+                            <li key={idx} className="py-2 text-sm text-gray-600 dark:text-gray-300">
+                                {activity.type === 'registration' && (
+                                    <span><b>{activity.user}</b> registered as <b>{activity.role}</b> <span className="text-xs text-gray-400 ml-2">{activity.time}</span></span>
+                                )}
+                                {activity.type === 'course' && (
+                                    <span>Course <b>{activity.course}</b> {activity.action} by <b>{activity.by}</b> <span className="text-xs text-gray-400 ml-2">{activity.time}</span></span>
+                                )}
+                            </li>
+                        ))
+                    ) : (
+                        <li className="py-2 text-sm text-gray-500 dark:text-gray-400">No recent activities</li>
+                    )}
                 </ul>
             </div>
         </div>
@@ -137,10 +242,7 @@ const QuickLink = ({ href, label, icon }: { href: string, label: string, icon: R
 // --- SystemSettingsContent (Modular with Tabs) ---
 const settingsTabs = [
     { key: 'institute', label: 'Institute Details' },
-    { key: 'collaborators', label: 'Collaborators' },
-    { key: 'adminAssignment', label: 'Admin Assignment' },
     { key: 'structure', label: 'Institution Structure' },
-    { key: 'bulkUpload', label: 'Bulk User Upload' },
 ];
 
 const SystemSettingsContent = ({ adminUid }: { adminUid: string }) => {
@@ -161,12 +263,9 @@ const SystemSettingsContent = ({ adminUid }: { adminUid: string }) => {
                     ))}
                 </nav>
             </div>
-            <div>
+            <div className="mt-6">
                 {activeTab === 'institute' && <InstituteDetailsSettings adminUid={adminUid} />}
-                {activeTab === 'collaborators' && <CollaboratorsSettings />}
-                {activeTab === 'adminAssignment' && <AdminAssignmentSettings />}
                 {activeTab === 'structure' && <InstitutionStructureSettings />}
-                {activeTab === 'bulkUpload' && <BulkUserUploadSettings />}
             </div>
         </div>
     );
