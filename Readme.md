@@ -1,5 +1,7 @@
 # Zenith Product Roadmap
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/neslang-05/zenith)
+
 **Created by:** Nilambar Elangbam  
 **Created time:** March 1, 2025, 7:54 PM  
 **Category:** Customer Research, Proposal  
@@ -7,7 +9,7 @@
 **Last updated by:** Nilambar Elangbam  
 **Last updated time:** March 1, 2025, 11:35 PM  
 
-**AI Summary:**  
+**Summary:**  
 Zenith is a comprehensive result management system designed to automate academic result processing, enhance accessibility, and provide analytics for improved student performance. It targets school administrations, students, faculty, and parents.
 
 ---
