@@ -555,13 +555,18 @@ export const getStudentMarksForCourse = async (courseId: string, studentUid: str
 };
 
 // Get all marks for all students in a specific course (for faculty/admin view)
-export const getAllMarksForCourse = async (courseId: string): Promise<(MarksData & { studentUid: string })[]> => {
+export const getAllMarksForCourse = async (courseId: string): Promise<(MarksData & { studentUid: string; id: string })[]> => {
     try {
         const marksCollectionRef = collection(db, 'courses', courseId, 'marks');
-        const querySnapshot = await getDocs(marksCollectionRef);
-        return querySnapshot.docs.map(doc => ({ studentUid: doc.id, ...doc.data() } as MarksData & { studentUid: string }));
+        const q = query(marksCollectionRef, orderBy('studentUid', 'asc')); // Order by studentUid for consistency
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ 
+            id: doc.id, // Explicitly add id
+            studentUid: doc.id, // studentUid is also the doc.id in this subcollection
+            ...doc.data() 
+        }) as MarksData & { studentUid: string; id: string });
     } catch (error) {
-        console.error(`Error fetching all marks for course ${courseId}:`, error);
+        console.error("Error fetching all marks for course:", error);
         throw error;
     }
 };
@@ -700,69 +705,128 @@ export const getAllUsers = async (): Promise<{ id: string; name?: string; email:
 
 // Get all admins
 export const getAllAdmins = async (): Promise<{ id: string; name?: string; email: string; role: string }[]> => {
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('role', '==', 'admin'), orderBy('name', 'asc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+    try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('role', '==', 'admin'), orderBy('name', 'asc'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            email: doc.data().email as string,
+            role: doc.data().role as string,
+            name: doc.data().name as string || undefined, // name might be optional
+            ...doc.data()
+        }));
+    } catch (error) {
+        console.error("Error fetching all admins:", error);
+        throw error;
+    }
 };
 
 // --- Institution Structure Management ---
 // Departments
-export const getDepartments = async () => {
+export const getDepartments = async (): Promise<(DocumentData & { id: string, name: string })[]> => {
   const ref = collection(db, 'departments');
   const snap = await getDocs(ref);
-  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  return snap.docs.map(doc => ({ id: doc.id, name: doc.data().name as string, ...doc.data() }));
 };
+
 export const addDepartment = async (name: string) => {
   const ref = collection(db, 'departments');
   const docRef = await addDoc(ref, { name });
   return docRef.id;
 };
+
 export const updateDepartment = async (id: string, name: string) => {
   const ref = doc(db, 'departments', id);
   await updateDoc(ref, { name });
 };
+
 export const deleteDepartment = async (id: string) => {
   const ref = doc(db, 'departments', id);
   await deleteDoc(ref);
 };
+
 // Semesters (subcollection)
 export const getSemesters = async (departmentId: string) => {
   const ref = collection(db, 'departments', departmentId, 'semesters');
   const snap = await getDocs(ref);
   return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
+
 export const addSemester = async (departmentId: string, name: string) => {
   const ref = collection(db, 'departments', departmentId, 'semesters');
   const docRef = await addDoc(ref, { name });
   return docRef.id;
 };
+
 export const updateSemester = async (departmentId: string, semesterId: string, name: string) => {
   const ref = doc(db, 'departments', departmentId, 'semesters', semesterId);
   await updateDoc(ref, { name });
 };
+
 export const deleteSemester = async (departmentId: string, semesterId: string) => {
   const ref = doc(db, 'departments', departmentId, 'semesters', semesterId);
   await deleteDoc(ref);
 };
+
 // Courses (subcollection)
-export const getCourses = async (departmentId: string, semesterId: string) => {
+export const getCourses = async (departmentId: string, semesterId: string): Promise<(CourseData & { id: string; createdAt?: Timestamp; })[]> => {
   const ref = collection(db, 'departments', departmentId, 'semesters', semesterId, 'courses');
   const snap = await getDocs(ref);
-  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  return snap.docs.map(doc => ({
+    id: doc.id,
+    courseName: doc.data().name, // Map 'name' from subcollection to 'courseName'
+    courseCode: doc.data().code, // Map 'code' from subcollection to 'courseCode'
+    // Add other CourseData properties from the document if they exist in subcollection
+    facultyUid: doc.data().facultyUid || null,
+    facultyName: doc.data().facultyName || null,
+    academicYear: doc.data().academicYear || null,
+    description: doc.data().description || null,
+    credits: doc.data().credits || null,
+    createdAt: doc.data().createdAt || null,
+    // Ensure other CourseData properties are mapped or set to null/default if not present
+  }) as CourseData & { id: string; createdAt?: Timestamp; });
 };
+
 export const addCourseToSemester = async (departmentId: string, semesterId: string, course: { name: string; code: string }) => {
-  const ref = collection(db, 'departments', departmentId, 'semesters', semesterId, 'courses');
-  const docRef = await addDoc(ref, course);
+  const coursesSubcollectionRef = collection(db, 'departments', departmentId, 'semesters', semesterId, 'courses');
+  const docRef = await addDoc(coursesSubcollectionRef, course);
+
+  // Also add to the top-level 'courses' collection for consistency and easier querying
+  const courseData = {
+    courseName: course.name,
+    courseCode: course.code,
+    departmentId: departmentId,
+    semesterId: semesterId,
+    // You might want to add other details here like facultyUid, academicYear, description etc.
+    // For now, these fields are minimal, assuming they will be filled later or are not critical for direct linking.
+    createdAt: serverTimestamp(),
+    institutionStructureCourseId: docRef.id // Link back to the subcollection document
+  };
+  await setDoc(doc(db, 'courses', docRef.id), courseData); // Use the same ID for top-level course
+
   return docRef.id;
 };
+
 export const updateCourseInSemester = async (departmentId: string, semesterId: string, courseId: string, course: { name: string; code: string }) => {
   const ref = doc(db, 'departments', departmentId, 'semesters', semesterId, 'courses', courseId);
   await updateDoc(ref, course);
+
+  // Also update the top-level 'courses' collection
+  const courseData = {
+    courseName: course.name,
+    courseCode: course.code,
+    updatedAt: serverTimestamp()
+  };
+  await updateDoc(doc(db, 'courses', courseId), courseData);
 };
+
 export const deleteCourseInSemester = async (departmentId: string, semesterId: string, courseId: string) => {
   const ref = doc(db, 'departments', departmentId, 'semesters', semesterId, 'courses', courseId);
   await deleteDoc(ref);
+
+  // Also delete from the top-level 'courses' collection
+  await deleteDoc(doc(db, 'courses', courseId));
 };
 
 // Ensure `app` is also exported if needed directly, though usually not.

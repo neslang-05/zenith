@@ -24,6 +24,9 @@ import {
     updateUserProfile,
     uploadProfileImage,
     getDepartments,
+    getSemesters,
+    getCourses,
+    getAllMarksForCourse,
 } from '@/lib/firebase'; // Relative path to lib
 import { User } from 'firebase/auth';
 import { DocumentData, Timestamp } from 'firebase/firestore';
@@ -31,7 +34,7 @@ import { DocumentData, Timestamp } from 'firebase/firestore';
 import {
     LayoutDashboard, Users, BookOpen, BarChart3, Settings, LogOut, ChevronsLeft, ChevronsRight,
     Moon, Sun, Users2, Library, ClipboardList, Bell, PlusCircle, UploadCloud, DownloadCloud,
-    FileText, Search, Edit3, Trash2, Eye, EyeOff, CheckCircle, XCircle, Send, Save, BookUser, UserPlus, Check, X, Home
+    FileText, Search, Edit3, Trash2, Eye, EyeOff, CheckCircle, XCircle, Send, Save, BookUser, UserPlus, Check, X, Home, Layers, Calendar
 } from 'lucide-react';
 
 import InstitutionStructureSettings from '@/components/InstitutionStructureSettings';
@@ -70,6 +73,13 @@ interface Course extends CourseData {
 interface Department extends DocumentData {
     id: string;
     name: string;
+    semesters: Semester[];
+}
+
+interface Semester extends DocumentData {
+    id: string;
+    name: string;
+    courses: Course[];
 }
 
 interface RegistrationActivity {
@@ -443,6 +453,12 @@ const StudentManagementContent = () => {
     const [studentRegNum, setStudentRegNum] = useState('');
     const [studentEmail, setStudentEmail] = useState('');
     const [studentPassword, setStudentPassword] = useState('');
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | ''>('');
+    const [selectedDepartmentName, setSelectedDepartmentName] = useState<string | ''>('');
+    const [selectedSemesterId, setSelectedSemesterId] = useState<string | ''>('');
+    const [selectedSemesterName, setSelectedSemesterName] = useState<string | ''>('');
+    const [departments, setDepartments] = useState<Department[]>([]);
+    const [semesters, setSemesters] = useState<Semester[]>([]);
     const [formError, setFormError] = useState<string | null>(null);
     const [formSuccess, setFormSuccess] = useState<string | null>(null);
     const [isCreatingStudent, setIsCreatingStudent] = useState(false);
@@ -461,14 +477,43 @@ const StudentManagementContent = () => {
         }
     }, []);
 
+    const fetchDepartments = useCallback(async () => {
+        try {
+            const depList = await getDepartments();
+            setDepartments(depList.map((dep: any) => ({ id: dep.id, name: dep.name, semesters: [] })));
+        } catch (err: any) {
+            console.error("Error fetching departments:", err);
+            setListError(`Failed to load departments: ${err.message}`);
+        }
+    }, []);
+
+    const fetchSemesters = useCallback(async (departmentId: string) => {
+        if (!departmentId) { setSemesters([]); return; }
+        try {
+            const semList = await getSemesters(departmentId);
+            setSemesters(semList.map((sem: any) => ({ id: sem.id, name: sem.name, courses: [] })));
+        } catch (err: any) {
+            console.error("Error fetching semesters:", err);
+            setListError(`Failed to load semesters for department ${departmentId}: ${err.message}`);
+        }
+    }, []);
+
     useEffect(() => {
         fetchStudents();
-    }, [fetchStudents]);
+        fetchDepartments(); // Fetch departments on initial load
+    }, [fetchStudents, fetchDepartments]);
+
+    useEffect(() => {
+        // Fetch semesters whenever selectedDepartmentId changes
+        fetchSemesters(selectedDepartmentId);
+        setSelectedSemesterId(''); // Reset semester when department changes
+        setSelectedSemesterName('');
+    }, [selectedDepartmentId, fetchSemesters]);
 
     const handleCreateStudent = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!studentName.trim() || !studentRegNum.trim() || !studentEmail.trim() || !studentPassword.trim()) {
-            setFormError("All fields are required.");
+        if (!studentName.trim() || !studentRegNum.trim() || !studentEmail.trim() || !studentPassword.trim() || !selectedDepartmentId || !selectedSemesterId) {
+            setFormError("All fields including Department and Semester are required.");
             return;
         }
         setIsCreatingStudent(true);
@@ -482,6 +527,10 @@ const StudentManagementContent = () => {
                 {
                     name: studentName.trim(),
                     registrationNumber: studentRegNum.trim().toUpperCase(),
+                    departmentId: selectedDepartmentId,
+                    departmentName: selectedDepartmentName,
+                    semesterId: selectedSemesterId,
+                    semesterName: selectedSemesterName,
                     sendWelcomeEmail: true,
                     initialPassword: studentPassword
                 }
@@ -492,6 +541,10 @@ const StudentManagementContent = () => {
             setStudentRegNum('');
             setStudentEmail('');
             setStudentPassword('');
+            setSelectedDepartmentId(''); // Clear selections
+            setSelectedDepartmentName('');
+            setSelectedSemesterId('');
+            setSelectedSemesterName('');
             fetchStudents(); // Refresh list
         } catch (err: any) {
             let specificError = "Failed to create student.";
@@ -523,6 +576,45 @@ const StudentManagementContent = () => {
                         <div>
                             <label htmlFor="studentRegNum" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Registration No.</label>
                             <input type="text" id="studentRegNum" value={studentRegNum} onChange={(e) => setStudentRegNum(e.target.value.toUpperCase())} required className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="departmentSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
+                            <select 
+                                id="departmentSelect"
+                                value={selectedDepartmentId}
+                                onChange={(e) => {
+                                    const selectedDep = departments.find(dep => dep.id === e.target.value);
+                                    setSelectedDepartmentId(e.target.value);
+                                    setSelectedDepartmentName(selectedDep ? selectedDep.name : '');
+                                }}
+                                required
+                                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:text-white"
+                            >
+                                <option value="">-- Select Department --</option>
+                                {departments.map(dep => (
+                                    <option key={dep.id} value={dep.id}>{dep.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="semesterSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Semester</label>
+                            <select 
+                                id="semesterSelect"
+                                value={selectedSemesterId}
+                                onChange={(e) => {
+                                    const selectedSem = semesters.find(sem => sem.id === e.target.value);
+                                    setSelectedSemesterId(e.target.value);
+                                    setSelectedSemesterName(selectedSem ? selectedSem.name : '');
+                                }}
+                                required
+                                disabled={!selectedDepartmentId} // Disable until a department is selected
+                                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:text-white"
+                            >
+                                <option value="">-- Select Semester --</option>
+                                {semesters.map(sem => (
+                                    <option key={sem.id} value={sem.id}>{sem.name}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
                     <div>
@@ -563,6 +655,8 @@ const StudentManagementContent = () => {
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Reg No.</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Email</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Department</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Semester</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">UID</th>
                                 </tr>
                             </thead>
@@ -572,6 +666,8 @@ const StudentManagementContent = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{student.name}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{student.registrationNumber}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{student.email}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{student.departmentName || 'N/A'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{student.semesterName || 'N/A'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-400 dark:text-gray-500 font-mono">{student.id}</td>
                                     </tr>
                                 ))}
@@ -594,7 +690,9 @@ const FacultyManagementContent = () => {
     const [facultyName, setFacultyName] = useState('');
     const [facultyEmail, setFacultyEmail] = useState('');
     const [facultyPassword, setFacultyPassword] = useState('');
-    const [department, setDepartment] = useState('');
+    const [departmentId, setDepartmentId] = useState<string | ''>('');
+    const [departmentName, setDepartmentName] = useState<string | ''>('');
+    const [departments, setDepartments] = useState<Department[]>([]);
     const [formError, setFormError] = useState<string | null>(null);
     const [formSuccess, setFormSuccess] = useState<string | null>(null);
     const [isCreatingFaculty, setIsCreatingFaculty] = useState(false);
@@ -613,14 +711,25 @@ const FacultyManagementContent = () => {
         }
     }, []);
 
+    const fetchDepartments = useCallback(async () => {
+        try {
+            const fetchedDepartments = await getDepartments();
+            setDepartments(fetchedDepartments.map((dep: any) => ({ id: dep.id, name: dep.name, semesters: [] })));
+        } catch (err: any) {
+            console.error("Error fetching departments:", err);
+            setListError(`Failed to load departments: ${err.message}`);
+        }
+    }, []);
+
     useEffect(() => {
         fetchFaculty();
-    }, [fetchFaculty]);
+        fetchDepartments();
+    }, [fetchFaculty, fetchDepartments]);
 
     const handleCreateFaculty = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!facultyName.trim() || !facultyEmail.trim() || !facultyPassword.trim()) {
-            setFormError("Name, Email, and Password are required.");
+        if (!facultyName.trim() || !facultyEmail.trim() || !facultyPassword.trim() || !departmentId) {
+            setFormError("Name, Email, Password, and Department are required.");
             return;
         }
         setIsCreatingFaculty(true);
@@ -633,7 +742,8 @@ const FacultyManagementContent = () => {
                 'faculty',
                 {
                     name: facultyName.trim(),
-                    department: department.trim()
+                    departmentId: departmentId,
+                    departmentName: departmentName
                 }
             );
 
@@ -641,8 +751,9 @@ const FacultyManagementContent = () => {
             setFacultyName('');
             setFacultyEmail('');
             setFacultyPassword('');
-            setDepartment('');
-            fetchFaculty(); // Refresh list
+            setDepartmentId('');
+            setDepartmentName('');
+            fetchFaculty();
         } catch (err: any) {
             let specificError = "Failed to create faculty.";
             if (err.code === 'auth/email-already-in-use') specificError = "Email already registered.";
@@ -671,8 +782,23 @@ const FacultyManagementContent = () => {
                             <input type="text" id="facultyName" value={facultyName} onChange={(e) => setFacultyName(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white" />
                         </div>
                          <div>
-                            <label htmlFor="department" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
-                            <input type="text" id="department" value={department} onChange={(e) => setDepartment(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-gray-700 dark:text-white" />
+                            <label htmlFor="departmentSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
+                            <select 
+                                id="departmentSelect"
+                                value={departmentId}
+                                onChange={(e) => {
+                                    const selectedDep = departments.find(dep => dep.id === e.target.value);
+                                    setDepartmentId(e.target.value);
+                                    setDepartmentName(selectedDep ? selectedDep.name : '');
+                                }}
+                                required
+                                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:text-white"
+                            >
+                                <option value="">-- Select Department --</option>
+                                {departments.map(dep => (
+                                    <option key={dep.id} value={dep.id}>{dep.name}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
                     <div>
@@ -720,7 +846,7 @@ const FacultyManagementContent = () => {
                                     <tr key={faculty.id}>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{faculty.name}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{faculty.email}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{faculty.department || 'N/A'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{faculty.departmentName || 'N/A'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-400 dark:text-gray-500 font-mono">{faculty.id}</td>
                                     </tr>
                                 ))}
@@ -737,221 +863,213 @@ const FacultyManagementContent = () => {
 type AdminMarksData = MarksData & { studentUid: string, studentName?: string, registrationNumber?: string };
 
 const CourseMarksAdminContent = ({ adminUser }: { adminUser: User }) => {
-    const [courses, setCourses] = useState<(CourseData & { id: string })[]>([]);
-    const [selectedCourse, setSelectedCourse] = useState<(CourseData & { id: string }) | null>(null);
-    const [registeredStudents, setRegisteredStudents] = useState<(DocumentData & { id: string })[]>([]);
-    const [studentMarks, setStudentMarks] = useState<AdminMarksData[]>([]);
+    const [departments, setDepartments] = useState<Department[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+    const [studentsMarks, setStudentsMarks] = useState<(AdminMarksData & { studentName?: string, registrationNumber?: string, id: string })[]>([]);
 
-    const [loadingCourses, setLoadingCourses] = useState(true);
-    const [loadingStudents, setLoadingStudents] = useState(false);
-    const [loadingMarks, setLoadingMarks] = useState(false);
-
-    const [currentEndTermMarks, setCurrentEndTermMarks] = useState<{ [studentUid: string]: string }>({});
-    const [marksError, setMarksError] = useState<string | null>(null);
-    const [marksSuccess, setMarksSuccess] = useState<string | null>(null);
-
-    useEffect(() => {
-        const fetchCourses = async () => {
-            setLoadingCourses(true);
-            try {
-                const courseList = await getAllCourses();
-                setCourses(courseList);
-            } catch (error) {
-                console.error("Error fetching courses for admin:", error);
-            } finally {
-                setLoadingCourses(false);
-            }
-        };
-        fetchCourses();
+    // Function to fetch the entire institution structure
+    const fetchInstitutionStructure = useCallback(async () => {
+        setLoading(true); setError(null);
+        try {
+            const depList = await getDepartments();
+            const departmentsWithNestedData: Department[] = await Promise.all(depList.map(async (dep: any) => {
+                const semList = await getSemesters(dep.id);
+                const semestersWithCourses: Semester[] = await Promise.all(semList.map(async (sem: any) => {
+                    const courseList = await getCourses(dep.id, sem.id);
+                    // Ensure Course object matches the expected Course interface, including all relevant fields
+                    return { 
+                        id: sem.id, 
+                        name: sem.name, 
+                        courses: courseList.map((c: any) => ({ 
+                            id: c.id, 
+                            courseName: c.courseName, // Use courseName from the already transformed object
+                            courseCode: c.courseCode, // Use courseCode from the already transformed object
+                            facultyUid: c.facultyUid || null, 
+                            facultyName: c.facultyName || null, 
+                            academicYear: c.academicYear || null, 
+                            description: c.description || null,
+                            credits: c.credits || null,
+                            createdAt: c.createdAt || null, // Assuming createdAt is available if relevant
+                        })) 
+                    };
+                }));
+                return { id: dep.id, name: dep.name, semesters: semestersWithCourses };
+            }));
+            setDepartments(departmentsWithNestedData);
+        } catch (err: any) {
+            setError(err.message || 'Failed to load institution structure.');
+        } finally { setLoading(false); }
     }, []);
 
-    const handleCourseSelect = async (courseId: string) => {
-        if (!courseId) {
-            setSelectedCourse(null);
-            setRegisteredStudents([]);
-            setStudentMarks([]);
-            return;
-        }
-        const course = courses.find(c => c.id === courseId);
-        setSelectedCourse(course || null);
+    // Effect to fetch institution structure on component mount
+    useEffect(() => {
+        fetchInstitutionStructure();
+    }, [fetchInstitutionStructure]);
 
-        if (course) {
-            setLoadingStudents(true);
-            setLoadingMarks(true);
-            try {
-                const studentsList = await getRegisteredStudentsForCourse(course.id);
-                setRegisteredStudents(studentsList);
-
-                const marksListPromises = studentsList.map(async (student) => {
-                    const marks = await getStudentMarksForCourse(course.id, student.id);
-                    return {
-                        studentUid: student.id,
-                        studentName: student.studentName,
-                        registrationNumber: student.registrationNumber,
-                        ...marks
-                    } as AdminMarksData;
-                });
-                const resolvedMarks = await Promise.all(marksListPromises);
-                setStudentMarks(resolvedMarks);
-
-                // Initialize currentEndTermMarks
-                const initialEndTermMarks: { [studentUid: string]: string } = {};
-                resolvedMarks.forEach(sm => {
-                    initialEndTermMarks[sm.studentUid] = String(sm.endTermMarks || '');
-                });
-                setCurrentEndTermMarks(initialEndTermMarks);
-
-            } catch (error) {
-                console.error("Error fetching students/marks for selected course:", error);
-            } finally {
-                setLoadingStudents(false);
-                setLoadingMarks(false);
-            }
-        }
-    };
-
-    const handleEndTermMarkChange = (studentUid: string, value: string) => {
-        setCurrentEndTermMarks(prev => ({ ...prev, [studentUid]: value }));
-    };
-
-    const handleSaveEndTermMark = async (studentUid: string) => {
-        if (!selectedCourse || !adminUser) return;
-        const markValue = currentEndTermMarks[studentUid];
-        if (markValue === undefined || markValue.trim() === '') {
-            setMarksError(`End term mark for student ${studentUid} cannot be empty.`);
-            return;
-        }
-        setMarksError(null); setMarksSuccess(null);
+    // Function to fetch marks for a selected course
+    const fetchMarksForCourse = useCallback(async (courseId: string) => {
+        setLoading(true); setError(null);
         try {
-            await upsertAdminEndTermMarks(selectedCourse.id, studentUid, { endTermMarks: markValue }, adminUser.uid);
-            setMarksSuccess(`End term mark for student ${studentUid} saved.`);
-            // Optionally refresh marks for this student
-            const updatedMark = await getStudentMarksForCourse(selectedCourse.id, studentUid);
-            setStudentMarks(prev => prev.map(sm => sm.studentUid === studentUid ? { ...sm, ...updatedMark, endTermMarks: markValue } : sm));
-
-        } catch (error: any) {
-            setMarksError(`Failed to save mark: ${error.message}`);
+            const marks = await getAllMarksForCourse(courseId);
+            const marksWithStudentDetails = await Promise.all(marks.map(async (mark) => {
+                const studentProfile = await getUserProfile(mark.studentUid);
+                return {
+                    ...mark,
+                    studentName: studentProfile?.name || 'N/A',
+                    registrationNumber: studentProfile?.registrationNumber || 'N/A',
+                };
+            }));
+            setStudentsMarks(marksWithStudentDetails);
+        } catch (err: any) {
+            setError(err.message || 'Failed to load marks for course.');
+        } finally {
+            setLoading(false);
         }
-    };
+    }, []);
 
-    const handlePublishEndTermMark = async (studentUid: string) => {
-        if (!selectedCourse || !adminUser) return;
-         setMarksError(null); setMarksSuccess(null);
-        try {
-            await publishAdminEndTermMarks(selectedCourse.id, studentUid, adminUser.uid);
-            setMarksSuccess(`End term mark for student ${studentUid} published.`);
-             // Refresh marks for this student
-            const updatedMark = await getStudentMarksForCourse(selectedCourse.id, studentUid);
-            setStudentMarks(prev => prev.map(sm => sm.studentUid === studentUid ? { ...sm, ...updatedMark, endTermPublished: true } : sm));
-        } catch (error: any) {
-            setMarksError(`Failed to publish mark: ${error.message}`);
+    // Effect to fetch marks when selectedCourse changes
+    useEffect(() => {
+        if (selectedCourse) {
+            fetchMarksForCourse(selectedCourse.id);
+        } else {
+            setStudentsMarks([]); // Clear marks if no course is selected
         }
-    };
+    }, [selectedCourse, fetchMarksForCourse]);
 
+    // Handler for selecting a course from the tree view
+    const handleCourseSelect = useCallback((course: Course) => {
+        setSelectedCourse(course);
+    }, []);
 
     return (
-        <div>
-            <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-200 mb-6">Course & Marks Administration</h2>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Manage End-Term Marks</h3>
+        <div className="p-6">
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6">Course & Marks Admin</h2>
 
-                {loadingCourses ? <LoadingSpinner /> : (
-                    <div className="mb-4">
-                        <label htmlFor="courseSelectAdmin" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Course</label>
-                        <select
-                            id="courseSelectAdmin"
-                            onChange={(e) => handleCourseSelect(e.target.value)}
-                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:text-white"
-                        >
-                            <option value="">-- Select a Course --</option>
-                            {courses.map(course => (
-                                <option key={course.id} value={course.id}>{course.courseName} ({course.courseCode}) - {course.academicYear}</option>
-                            ))}
-                        </select>
-                    </div>
-                )}
+            {loading && (
+                <div className="flex items-center justify-center p-4"><LoadingSpinner /> <span className="ml-2 text-gray-500">Loading institution structure...</span></div>
+            )}
+            {error && <div className="text-red-500 p-4">Error: {error}</div>}
 
-                {selectedCourse && (
+            {!loading && !error && departments.length === 0 && (
+                <div className="text-gray-500 p-4">No institution structure found. Please add departments, semesters, and courses in System Settings &gt; Institution Structure.</div>
+            )}
+
+            {!loading && !error && departments.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Left Column: Institution Structure Tree */}
                     <div>
-                        <h4 className="text-lg font-medium text-gray-700 dark:text-gray-300 mt-6 mb-2">
-                            Students in: {selectedCourse.courseName}
-                        </h4>
-                        {marksError && <div className="p-3 bg-red-100 text-red-700 rounded-md text-sm mb-2">{marksError}</div>}
-                        {marksSuccess && <div className="p-3 bg-green-100 text-green-700 rounded-md text-sm mb-2">{marksSuccess}</div>}
-
-                        {loadingStudents || loadingMarks ? <LoadingSpinner /> : registeredStudents.length === 0 ? (
-                            <p className="text-gray-500 dark:text-gray-400">No students registered for this course.</p>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                    <thead className="bg-gray-50 dark:bg-gray-700">
-                                        <tr>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Student Name</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Reg No.</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Internal (Pub)</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Mid-Term (Pub)</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">End-Term Mark</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                        {studentMarks.map(sm => (
-                                            <tr key={sm.studentUid}>
-                                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-800 dark:text-gray-200">{sm.studentName || 'N/A'}</td>
-                                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{sm.registrationNumber || 'N/A'}</td>
-                                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                                    {sm.internalMarks || '-'} {sm.internalPublished ? <CheckCircle size={14} className="inline text-green-500 ml-1" /> : <XCircle size={14} className="inline text-gray-400 ml-1" />}
-                                                </td>
-                                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                                    {sm.midTermMarks || '-'} {sm.midTermPublished ? <CheckCircle size={14} className="inline text-green-500 ml-1" /> : <XCircle size={14} className="inline text-gray-400 ml-1" />}
-                                                </td>
-                                                <td className="px-4 py-2 whitespace-nowrap text-sm">
-                                                    <input
-                                                        type="text"
-                                                        value={currentEndTermMarks[sm.studentUid] || ''}
-                                                        onChange={(e) => handleEndTermMarkChange(sm.studentUid, e.target.value)}
-                                                        className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md sm:text-sm dark:bg-gray-700 dark:text-white"
-                                                        placeholder="N/A"
-                                                        disabled={sm.endTermPublished}
-                                                    />
-                                                    {sm.endTermPublished && <span title="Published"><CheckCircle size={14} className="inline text-green-500 ml-1" /></span>}
-                                                </td>
-                                                <td className="px-4 py-2 whitespace-nowrap text-sm space-x-2">
-                                                    {!sm.endTermPublished ? (
-                                                        <>
-                                                            <button
-                                                                onClick={() => handleSaveEndTermMark(sm.studentUid)}
-                                                                className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
-                                                                title="Save End-Term Mark"
-                                                            >
-                                                                <Save size={16}/>
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handlePublishEndTermMark(sm.studentUid)}
-                                                                className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
-                                                                title="Publish End-Term Mark"
-                                                                disabled={!currentEndTermMarks[sm.studentUid]?.trim()} // Disable if no mark entered
-                                                            >
-                                                                <Send size={16}/>
-                                                            </button>
-                                                        </>
-                                                    ) : (
-                                                        <span className="text-green-600 text-xs">Published</span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
+                        <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Academic Structure</h3>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                            {departments.map(department => (
+                                <div key={department.id} className="mb-4 p-3 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-700">
+                                    <h4 className="font-bold text-lg text-gray-700 dark:text-gray-100 mb-2 flex items-center">
+                                        <Layers size={20} className="mr-2 text-blue-500" />
+                                        {department.name}
+                                    </h4>
+                                    <div className="ml-4 border-l pl-4 border-gray-300 dark:border-gray-600">
+                                        {department.semesters.length > 0 ? (
+                                            department.semesters.map(semester => (
+                                                <div key={semester.id} className="mb-3 p-2 border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800">
+                                                    <h5 className="font-semibold text-md text-gray-700 dark:text-gray-200 mb-2 flex items-center">
+                                                        <Calendar size={18} className="mr-2 text-green-500" />
+                                                        {semester.name}
+                                                    </h5>
+                                                    <div className="ml-4 border-l pl-4 border-gray-200 dark:border-gray-700">
+                                                        {semester.courses.length > 0 ? (
+                                                            semester.courses.map(course => (
+                                                                <div 
+                                                                    key={course.id} 
+                                                                    className={`p-2 mb-1 rounded-md cursor-pointer flex items-center justify-between transition-colors 
+                                                                                ${selectedCourse?.id === course.id ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
+                                                                    onClick={() => handleCourseSelect(course)}
+                                                                >
+                                                                    <span className="flex items-center">
+                                                                        <BookOpen size={16} className="mr-2 text-purple-500" />
+                                                                        {course.courseName} ({course.courseCode})
+                                                                    </span>
+                                                                    <span className="text-sm text-gray-500 dark:text-gray-400">{course.facultyName || 'N/A'}</span>
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            <p className="text-sm text-gray-500 dark:text-gray-400">No courses in this semester.</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">No semesters in this department.</p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                )}
-            </div>
+
+                    {/* Right Column: Marks Management for Selected Course */}
+                    <div>
+                        <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Marks Management</h3>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                            {!selectedCourse ? (
+                                <p className="text-gray-500 dark:text-gray-400">Select a course from the left to manage marks.</p>
+                            ) : (
+                                <div>
+                                    <h4 className="text-lg font-bold mb-4">Marks for {selectedCourse.courseName} ({selectedCourse.courseCode})</h4>
+                                    {loading ? (
+                                        <div className="flex items-center justify-center p-4"><LoadingSpinner /> <span className="ml-2 text-gray-500">Loading marks...</span></div>
+                                    ) : studentsMarks.length > 0 ? (
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                                <thead className="bg-gray-50 dark:bg-gray-700">
+                                                    <tr>
+                                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Student Name</th>
+                                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Reg. No.</th>
+                                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Internal</th>
+                                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Mid Term</th>
+                                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">End Term</th>
+                                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                                    {studentsMarks.map((studentMark) => (
+                                                        <tr key={studentMark.id}>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{studentMark.studentName}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{studentMark.registrationNumber}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{studentMark.internalMarks || 'N/A'}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{studentMark.midTermMarks || 'N/A'}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{studentMark.endTermMarks || 'N/A'}</td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                                <button 
+                                                                    onClick={() => { /* Implement Edit logic for marks */ }} 
+                                                                    className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mr-3"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => { /* Implement Publish logic for marks */ }} 
+                                                                    className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                                                >
+                                                                    Publish
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <p className="text-gray-500 dark:text-gray-400">No marks available for this course yet.</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
-
 
 // --- GenericContent (Placeholder) ---
 const GenericContent = ({ pageName }: { pageName: string }) => (
