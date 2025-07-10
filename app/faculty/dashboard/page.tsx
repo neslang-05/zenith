@@ -5,11 +5,11 @@ import FacultyLayout from '../FacultyLayout'; // Adjust path if needed
 import { useSearchParams } from 'next/navigation';
 import {
     auth, getUserProfile, addCourse, getCoursesByFaculty, getRegisteredStudentsForCourse,
-    upsertFacultyMarks, publishFacultyMarks, getStudentMarksForCourse, CourseData, MarksData, getAllStudents, registerStudentForCourse, getDepartments, getSemesters, getCourses, updateCourseInSemester, addSemester, addCourseToSemester
+    upsertFacultyMarks, publishFacultyMarks, getStudentMarksForCourse, CourseData, MarksData, getAllStudents, registerStudentForCourse, getDepartments, getSemesters
 } from '@/lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
-import { DocumentData, Timestamp } from 'firebase/firestore';
-import { PlusCircle, Edit3, CheckCircle, XCircle, Send, Save, Users, ListChecks, Eye, ChevronDown, ChevronUp, Layers, Calendar, BookOpen } from 'lucide-react';
+import { DocumentData } from 'firebase/firestore';
+import { PlusCircle, Edit3, CheckCircle, XCircle, Send, Save, Users, ListChecks, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Loading Spinner
 const LoadingSpinner = ({ size = 'h-5 w-5', color = 'border-indigo-500' }: { size?: string, color?: string }) => (
@@ -18,148 +18,61 @@ const LoadingSpinner = ({ size = 'h-5 w-5', color = 'border-indigo-500' }: { siz
 
 // --- Add Course Component ---
 const AddCourseForm = ({ facultyProfile, onCourseAdded }: { facultyProfile: DocumentData, onCourseAdded: () => void }) => {
-    const [viewMode, setViewMode] = useState<'new' | 'existing'>('new'); // 'new' or 'existing'
     const [courseName, setCourseName] = useState('');
     const [courseCode, setCourseCode] = useState('');
     const [academicYear, setAcademicYear] = useState(`${new Date().getFullYear()}-${new Date().getFullYear() + 1}`);
     const [description, setDescription] = useState('');
     const [credits, setCredits] = useState('');
+    const [departments, setDepartments] = useState<DocumentData[]>([]);
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
+    const [semesters, setSemesters] = useState<DocumentData[]>([]);
+    const [selectedSemesterId, setSelectedSemesterId] = useState<string>('');
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
     const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
-    // States for existing course selection
-    const [availableCourses, setAvailableCourses] = useState<(CourseData & { id: string, departmentId: string, semesterId: string })[]>([]);
-    const [selectedExistingCourseId, setSelectedExistingCourseId] = useState<string | ''>('');
-
-    // States for new course creation within structure
-    const [departments, setDepartments] = useState<Department[]>([]);
-    const [selectedDepartmentForCourse, setSelectedDepartmentForCourse] = useState<string | ''>('');
-    const [semestersForDepartment, setSemestersForDepartment] = useState<Semester[]>([]);
-    const [selectedSemesterForCourse, setSelectedSemesterForCourse] = useState<string | ''>('');
-    const [newSemesterName, setNewSemesterName] = useState('');
-    const [isCreatingNewSemester, setIsCreatingNewSemester] = useState(false);
-
-    // Fetch departments and relevant existing courses on load
     useEffect(() => {
-        const fetchInitialData = async () => {
-            if (!facultyProfile || !facultyProfile.departmentId) return; // Faculty must have a department and profile loaded
-
+        const fetchDepartmentsData = async () => {
             try {
-                // Fetch departments (only the faculty's department for simplicity in this form)
-                const depList = await getDepartments();
-                const facultyDepartment = depList.find((dep: { id: string, name: string }) => dep.id === facultyProfile.departmentId);
-                if (facultyDepartment) {
-                    // Ensure the department object itself is correctly typed
-                    setDepartments([{ id: facultyDepartment.id, name: facultyDepartment.name, semesters: [] }]); 
-                    setSelectedDepartmentForCourse(facultyDepartment.id);
-
-                    // Fetch semesters and courses for this department
-                    const semList = await getSemesters(facultyDepartment.id);
-                    const allCoursesInFacultyDepartment: (CourseData & { id: string, departmentId: string, semesterId: string })[] = [];
-
-                    for (const sem of semList) {
-                        const coursesInSem = await getCourses(facultyDepartment.id, sem.id);
-                        coursesInSem.forEach((course: CourseData & { id: string }) => {
-                            // Filter: show courses not assigned, or assigned to current faculty
-                            if (!course.facultyUid || course.facultyUid === facultyProfile.uid) {
-                                allCoursesInFacultyDepartment.push({
-                                    ...course, // Spread all properties from CourseData & { id: string }
-                                    departmentId: facultyDepartment.id,
-                                    semesterId: sem.id
-                                });
-                            }
-                        });
-                    }
-                    setAvailableCourses(allCoursesInFacultyDepartment);
-                    setSemestersForDepartment(semList.map((s: any) => ({ id: s.id, name: s.name, courses: [] }))); // Map only necessary fields
-                }
+                const departmentsList = await getDepartments();
+                setDepartments(departmentsList);
             } catch (error) {
-                console.error("Error fetching initial course data for faculty:", error);
-                setFormError("Failed to load course options.");
+                console.error("Error fetching departments:", error);
+                setFormError("Failed to load departments.");
             }
         };
-        fetchInitialData();
-    }, [facultyProfile]); // Depend on facultyProfile to re-fetch when it's available
+        fetchDepartmentsData();
+    }, []);
 
-    // Effect to update semesters when department changes (though for faculty it's usually just one department)
     useEffect(() => {
-        const fetchSemestersForSelectedDepartment = async () => {
-            if (selectedDepartmentForCourse) {
+        const fetchSemestersData = async () => {
+            if (selectedDepartmentId) {
                 try {
-                    const sems = await getSemesters(selectedDepartmentForCourse);
-                    setSemestersForDepartment(sems.map((s: any) => ({ id: s.id, name: s.name, courses: [] })));
+                    const semestersList = await getSemesters(selectedDepartmentId);
+                    setSemesters(semestersList);
                 } catch (error) {
                     console.error("Error fetching semesters:", error);
-                    setFormError("Failed to load semesters.");
+                    setFormError("Failed to load semesters for the selected department.");
                 }
+            } else {
+                setSemesters([]);
+                setSelectedSemesterId('');
             }
         };
-        fetchSemestersForSelectedDepartment();
-    }, [selectedDepartmentForCourse]);
+        fetchSemestersData();
+    }, [selectedDepartmentId]);
 
-    const handleAddExistingCourse = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedExistingCourseId) {
-            setFormError("Please select an existing course.");
+        if (!courseName || !courseCode || !academicYear || !selectedDepartmentId || !selectedSemesterId) {
+            setFormError("Course Name, Code, Academic Year, Department, and Semester are required.");
             return;
         }
-
         setIsSubmitting(true);
         setFormError(null);
         setFormSuccess(null);
         try {
-            const courseToClaim = availableCourses.find(c => c.id === selectedExistingCourseId);
-            if (!courseToClaim) { throw new Error("Selected course not found."); }
-
-            // Update the existing course with faculty's UID and name
-            await updateCourseInSemester(
-                courseToClaim.departmentId,
-                courseToClaim.semesterId,
-                courseToClaim.id,
-                { 
-                    name: courseToClaim.courseName, 
-                    code: courseToClaim.courseCode,
-                }
-            );
-            setFormSuccess(`Course "${courseToClaim.courseName}" assigned to you successfully!`);
-            setSelectedExistingCourseId('');
-            onCourseAdded(); // Refresh course list in parent
-        } catch (error: any) {
-            setFormError(`Failed to assign course: ${error.message}`);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleAddNewCourse = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!courseName.trim() || !courseCode.trim() || !academicYear.trim()) {
-            setFormError("Course Name, Code, and Academic Year are required.");
-            return;
-        }
-        if (!selectedDepartmentForCourse || (!selectedSemesterForCourse && !isCreatingNewSemester)) {
-            setFormError("Please select a Department and Semester, or create a new semester.");
-            return;
-        }
-        if (isCreatingNewSemester && !newSemesterName.trim()) {
-            setFormError("New semester name cannot be empty.");
-            return;
-        }
-
-        setIsSubmitting(true);
-        setFormError(null);
-        setFormSuccess(null);
-        let targetSemesterId = selectedSemesterForCourse;
-
-        try {
-            if (isCreatingNewSemester) {
-                // Create new semester first
-                targetSemesterId = await addSemester(selectedDepartmentForCourse, newSemesterName.trim());
-                setFormSuccess(`New semester '${newSemesterName.trim()}' created.`);
-            }
-
             const courseData: CourseData = {
                 courseName: courseName.trim(),
                 courseCode: courseCode.trim().toUpperCase(),
@@ -168,19 +81,14 @@ const AddCourseForm = ({ facultyProfile, onCourseAdded }: { facultyProfile: Docu
                 academicYear: academicYear.trim(),
                 description: description.trim(),
                 credits: credits ? parseInt(credits) : undefined,
+                departmentId: selectedDepartmentId,
+                semesterId: selectedSemesterId,
             };
-
-            // Add course to the selected/newly created semester
-            await addCourseToSemester(selectedDepartmentForCourse, targetSemesterId, { name: courseData.courseName, code: courseData.courseCode });
-            
+            await addCourse(courseData);
             setFormSuccess(`Course "${courseName}" added successfully!`);
             setCourseName(''); setCourseCode(''); setDescription(''); setCredits('');
-            setAcademicYear(`${new Date().getFullYear()}-${new Date().getFullYear() + 1}`);
-            setNewSemesterName('');
-            setIsCreatingNewSemester(false);
-            setSelectedSemesterForCourse('');
+            setSelectedDepartmentId(''); setSelectedSemesterId('');
             onCourseAdded(); // Callback to refresh course list
-
         } catch (error: any) {
             setFormError(`Failed to add course: ${error.message}`);
         } finally {
@@ -190,136 +98,72 @@ const AddCourseForm = ({ facultyProfile, onCourseAdded }: { facultyProfile: Docu
 
     return (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Add/Assign Course</h3>
-
-            <div className="mb-4 border-b pb-4">
-                <button 
-                    onClick={() => setViewMode('new')} 
-                    className={`mr-4 px-4 py-2 rounded-md text-sm font-medium ${viewMode === 'new' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'}`}
-                >
-                    Add New Course
-                </button>
-                <button 
-                    onClick={() => setViewMode('existing')} 
-                    className={`px-4 py-2 rounded-md text-sm font-medium ${viewMode === 'existing' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200'}`}
-                >
-                    Assign Existing Course
-                </button>
-            </div>
-
-            {formError && <p className="text-red-500 text-sm mb-4">{formError}</p>}
-            {formSuccess && <p className="text-green-500 text-sm mb-4">{formSuccess}</p>}
-
-            {viewMode === 'new' && (
-                <form onSubmit={handleAddNewCourse} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="newCourseDepartmentSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
-                            <select 
-                                id="newCourseDepartmentSelect"
-                                value={selectedDepartmentForCourse}
-                                onChange={(e) => setSelectedDepartmentForCourse(e.target.value)}
-                                required
-                                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:text-white"
-                            >
-                                <option value="">-- Select Department --</option>
-                                {departments.map(dep => (
-                                    <option key={dep.id} value={dep.id}>{dep.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="newCourseSemesterSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Semester</label>
-                            <select 
-                                id="newCourseSemesterSelect"
-                                value={selectedSemesterForCourse}
-                                onChange={(e) => setSelectedSemesterForCourse(e.target.value)}
-                                required={!isCreatingNewSemester}
-                                disabled={!selectedDepartmentForCourse || isCreatingNewSemester}
-                                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:text-white"
-                            >
-                                <option value="">-- Select Semester --</option>
-                                {semestersForDepartment.map(sem => (
-                                    <option key={sem.id} value={sem.id}>{sem.name}</option>
-                                ))}
-                            </select>
-                            <div className="mt-2 flex items-center">
-                                <input 
-                                    type="checkbox" 
-                                    id="createNewSemesterCheckbox" 
-                                    checked={isCreatingNewSemester} 
-                                    onChange={(e) => setIsCreatingNewSemester(e.target.checked)}
-                                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                />
-                                <label htmlFor="createNewSemesterCheckbox" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">Create New Semester</label>
-                            </div>
-                            {isCreatingNewSemester && selectedDepartmentForCourse && (
-                                <input 
-                                    type="text" 
-                                    placeholder="New Semester Name" 
-                                    value={newSemesterName} 
-                                    onChange={(e) => setNewSemesterName(e.target.value)}
-                                    required 
-                                    className="mt-2 w-full input-style"
-                                />
-                            )}
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="courseName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Course Name</label>
-                            <input type="text" id="courseName" value={courseName} onChange={e => setCourseName(e.target.value)} required className="mt-1 w-full input-style" />
-                        </div>
-                        <div>
-                            <label htmlFor="courseCode" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Course Code</label>
-                            <input type="text" id="courseCode" value={courseCode} onChange={e => setCourseCode(e.target.value.toUpperCase())} required className="mt-1 w-full input-style" />
-                        </div>
-                    </div>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="academicYear" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Academic Year</label>
-                            <input type="text" id="academicYear" value={academicYear} onChange={e => setAcademicYear(e.target.value)} required placeholder="e.g., 2023-2024" className="mt-1 w-full input-style" />
-                        </div>
-                        <div>
-                            <label htmlFor="credits" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Credits (Optional)</label>
-                            <input type="number" id="credits" value={credits} onChange={e => setCredits(e.target.value)} className="mt-1 w-full input-style" />
-                        </div>
+            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">Add New Course</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                {formError && <p className="text-red-500 text-sm">{formError}</p>}
+                {formSuccess && <p className="text-green-500 text-sm">{formSuccess}</p>}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor="courseName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Course Name</label>
+                        <input type="text" id="courseName" value={courseName} onChange={e => setCourseName(e.target.value)} required className="mt-1 w-full input-style" />
                     </div>
                     <div>
-                        <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description (Optional)</label>
-                        <textarea id="description" value={description} onChange={e => setDescription(e.target.value)} rows={3} className="mt-1 w-full input-style"></textarea>
+                        <label htmlFor="courseCode" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Course Code</label>
+                        <input type="text" id="courseCode" value={courseCode} onChange={e => setCourseCode(e.target.value.toUpperCase())} required className="mt-1 w-full input-style" />
                     </div>
-                    <button type="submit" disabled={isSubmitting} className="btn-primary inline-flex items-center">
-                        {isSubmitting ? <LoadingSpinner size="h-4 w-4 mr-2" color="border-white" /> : <PlusCircle size={16} className="mr-2" />}
-                        {isSubmitting ? 'Adding...' : 'Add Course'}
-                    </button>
-                </form>
-            )}
-
-            {viewMode === 'existing' && (
-                <form onSubmit={handleAddExistingCourse} className="space-y-4">
-                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Select a course from your department that has not yet been assigned to a faculty, or is assigned to you.</p>
+                </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label htmlFor="existingCourseSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Course</label>
-                        <select 
-                            id="existingCourseSelect"
-                            value={selectedExistingCourseId}
-                            onChange={(e) => setSelectedExistingCourseId(e.target.value)}
+                        <label htmlFor="academicYear" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Academic Year</label>
+                        <input type="text" id="academicYear" value={academicYear} onChange={e => setAcademicYear(e.target.value)} required placeholder="e.g., 2023-2024" className="mt-1 w-full input-style" />
+                    </div>
+                    <div>
+                        <label htmlFor="credits" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Credits (Optional)</label>
+                        <input type="number" id="credits" value={credits} onChange={e => setCredits(e.target.value)} className="mt-1 w-full input-style" />
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor="department" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
+                        <select
+                            id="department"
+                            value={selectedDepartmentId}
+                            onChange={e => setSelectedDepartmentId(e.target.value)}
                             required
                             className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:text-white"
                         >
-                            <option value="">-- Select an Existing Course --</option>
-                            {availableCourses.map(course => (
-                                <option key={course.id} value={course.id}>{course.courseName} ({course.courseCode})</option>
+                            <option value="">-- Select Department --</option>
+                            {departments.map(dept => (
+                                <option key={dept.id} value={dept.id}>{dept.name}</option>
                             ))}
                         </select>
                     </div>
-                    <button type="submit" disabled={isSubmitting} className="btn-primary inline-flex items-center">
-                        {isSubmitting ? <LoadingSpinner size="h-4 w-4 mr-2" color="border-white" /> : <CheckCircle size={16} className="mr-2" />}
-                        {isSubmitting ? 'Assigning...' : 'Assign Selected Course'}
-                    </button>
-                </form>
-            )}
+                    <div>
+                        <label htmlFor="semester" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Semester</label>
+                        <select
+                            id="semester"
+                            value={selectedSemesterId}
+                            onChange={e => setSelectedSemesterId(e.target.value)}
+                            required
+                            disabled={!selectedDepartmentId || semesters.length === 0}
+                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:text-white"
+                        >
+                            <option value="">-- Select Semester --</option>
+                            {semesters.map(sem => (
+                                <option key={sem.id} value={sem.id}>{sem.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description (Optional)</label>
+                    <textarea id="description" value={description} onChange={e => setDescription(e.target.value)} rows={3} className="mt-1 w-full input-style"></textarea>
+                </div>
+                <button type="submit" disabled={isSubmitting} className="btn-primary inline-flex items-center">
+                    {isSubmitting ? <LoadingSpinner size="h-4 w-4 mr-2" color="border-white" /> : <PlusCircle size={16} className="mr-2" />}
+                    {isSubmitting ? 'Adding...' : 'Add Course'}
+                </button>
+            </form>
             <style jsx>{`
                 .input-style {
                     padding: 0.5rem 0.75rem;
@@ -358,19 +202,6 @@ const AddCourseForm = ({ facultyProfile, onCourseAdded }: { facultyProfile: Docu
 
 // --- Manage Marks Component ---
 type FacultyMarksData = MarksData & { studentUid: string, studentName?: string, registrationNumber?: string };
-
-// Define nested interfaces for institution structure within faculty dashboard
-interface Department { // Extend DocumentData if you want Firestore fields like 'id'
-    id: string;
-    name: string;
-    semesters: Semester[];
-}
-
-interface Semester {
-    id: string;
-    name: string;
-    courses: (CourseData & { id: string })[];
-}
 
 const ManageMarks = ({ facultyProfile, courses }: { facultyProfile: DocumentData, courses: (CourseData & { id: string })[]}) => {
     const [selectedCourseId, setSelectedCourseId] = useState<string>('');
@@ -777,201 +608,89 @@ const ListCourses = ({ courses, onSelectCourse }: { courses: (CourseData & { id:
 
 // --- Main Faculty Dashboard Page ---
 const FacultyDashboardPage = () => {
-    const searchParams = useSearchParams();
-    const view = searchParams.get('view') || 'dashboard';
-
-    const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const [facultyProfile, setFacultyProfile] = useState<DocumentData | null>(null);
-    const [loadingAuth, setLoadingAuth] = useState(true);
+    const [loadingProfile, setLoadingProfile] = useState(true);
+    const [courses, setCourses] = useState<(CourseData & { id: string })[]>([]);
     const [loadingCourses, setLoadingCourses] = useState(true);
-    const [loadingStructure, setLoadingStructure] = useState(true); // New state for institution structure loading
-    const [error, setError] = useState<string | null>(null);
-    const [facultyCourses, setFacultyCourses] = useState<(CourseData & { id: string })[]>([]);
-    const [departments, setDepartments] = useState<Department[]>([]); // New state for structured departments
+    
+    const searchParams = useSearchParams();
+    const activeView = searchParams.get('view') || 'dashboard'; // Default view
+
+    const fetchFacultyData = useCallback(async () => {
+        const user = auth.currentUser;
+        if (user) {
+            console.log('Current user UID:', user.uid); // Debug log
+            setLoadingProfile(true);
+            setLoadingCourses(true);
+            try {
+                const profile = await getUserProfile(user.uid);
+                console.log('Faculty profile:', profile); // Debug log
+                setFacultyProfile(profile);
+                if (profile) {
+                    console.log('Fetching courses for faculty:', profile.uid); // Debug log
+                    const facultyCourses = await getCoursesByFaculty(profile.uid);
+                    console.log('Faculty courses:', facultyCourses); // Debug log
+                    setCourses(facultyCourses);
+                }
+            } catch (error) {
+                console.error("Error fetching faculty data:", error);
+            } finally {
+                setLoadingProfile(false);
+                setLoadingCourses(false);
+            }
+        }
+    }, []);
 
     useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged(async (user) => {
-            if (user) {
-                setCurrentUser(user);
-                try {
-                    const profile = await getUserProfile(user.uid);
-                    if (profile && profile.role === 'faculty') {
-                        setFacultyProfile(profile);
-                        // Fetch courses and structure only after profile is loaded
-                        await fetchFacultyCourses(user.uid);
-                        await fetchInstitutionStructure(user.uid); // Fetch structure specific to faculty
-                    } else {
-                        // Redirect if not a faculty member
-                        window.location.href = '/'; // Or a more specific unauthorized page
-                    }
-                } catch (err: any) {
-                    console.error("Error fetching faculty profile:", err);
-                    setError(err.message || 'Failed to load faculty profile.');
-                }
-            } else {
-                // Not authenticated, redirect to login
-                window.location.href = '/login';
-            }
-            setLoadingAuth(false);
-        });
-        return () => unsubscribe();
-    }, []);
+        fetchFacultyData();
+    }, [fetchFacultyData]);
 
-    const fetchFacultyCourses = useCallback(async (facultyUid: string) => {
-        setLoadingCourses(true); setError(null);
-        try {
-            const courses = await getCoursesByFaculty(facultyUid);
-            setFacultyCourses(courses);
-        } catch (err: any) {
-            setError(err.message || 'Failed to load your courses.');
-        } finally {
-            setLoadingCourses(false);
-        }
-    }, []);
 
-    // New function to fetch institution structure relevant to the faculty
-    const fetchInstitutionStructure = useCallback(async (facultyUid: string) => {
-        setLoadingStructure(true); setError(null);
-        try {
-            const depList = await getDepartments();
-            const departmentsWithNestedData: Department[] = await Promise.all(depList.map(async (dep: any) => {
-                const semList = await getSemesters(dep.id);
-                const semestersWithCourses: Semester[] = await Promise.all(semList.map(async (sem: any) => {
-                    const courseList = await getCourses(dep.id, sem.id);
-                    // Filter courses by facultyUid and ensure type consistency
-                    const facultySpecificCourses = courseList.filter(c => c.facultyUid === facultyUid).map(c => ({ 
-                        id: c.id, 
-                        courseName: c.courseName, 
-                        courseCode: c.courseCode, 
-                        facultyUid: c.facultyUid, 
-                        facultyName: c.facultyName, 
-                        academicYear: c.academicYear, 
-                        description: c.description,
-                        credits: c.credits,
-                        createdAt: c.createdAt,
-                    }));
-                    return { id: sem.id, name: sem.name, courses: facultySpecificCourses };
-                }));
-                // Only include semesters that have courses for this faculty
-                const relevantSemesters = semestersWithCourses.filter(sem => sem.courses.length > 0);
-                return { id: dep.id, name: dep.name, semesters: relevantSemesters };
-            }));
-            // Only include departments that have relevant semesters for this faculty
-            const relevantDepartments = departmentsWithNestedData.filter(dep => dep.semesters.length > 0);
-            setDepartments(relevantDepartments);
-        } catch (err: any) {
-            setError(err.message || 'Failed to load institution structure.');
-        } finally {
-            setLoadingStructure(false);
-        }
-    }, []);
-
-    if (loadingAuth) {
-        return (
-            <FacultyLayout>
-                <div className="flex h-full items-center justify-center bg-gray-100 dark:bg-gray-900">
-                    <LoadingSpinner size="h-10 w-10" />
-                    <p className="ml-3 text-xl text-gray-700 dark:text-gray-300">Authenticating Faculty...</p>
-                </div>
-            </FacultyLayout>
-        );
+    if (loadingProfile) {
+        return <FacultyLayout><div className="flex justify-center items-center h-full"><LoadingSpinner size="h-8 w-8" /> <span className="ml-2">Loading profile...</span></div></FacultyLayout>;
     }
-
-    if (!currentUser || !facultyProfile) {
-        return null; // Redirect handled by useEffect
+    if (!facultyProfile) {
+        return <FacultyLayout><p className="text-red-500">Faculty profile not found.</p></FacultyLayout>;
     }
 
     const renderContent = () => {
-        if (error) {
-            return <div className="text-red-500 p-4">Error: {error}</div>;
-        }
-
-        switch (view) {
-            case 'dashboard':
-                return (
-                    <div className="p-6">
-                        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6">Faculty Dashboard</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                            {/* Display summary of courses, students etc. */}
-                            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-                                <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-2">Total Courses Assigned</h3>
-                                <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">{facultyCourses.length}</p>
-                            </div>
-                            {/* Add more summary cards as needed */}
+        if (activeView === 'dashboard') {
+            return (
+                <div>
+                    <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-6">Faculty Dashboard</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                            <h3 className="text-lg font-medium mb-2">Quick Stats</h3>
+                            <p>Total Courses: {courses.length}</p>
+                            {/* Add more stats like total students taught, etc. */}
                         </div>
-
-                        {/* Section to display institution structure for assigned courses */}
-                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-8">
-                            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4">My Courses (Structured)</h3>
-                            {loadingStructure ? (
-                                <div className="flex items-center justify-center p-4"><LoadingSpinner /> <span className="ml-2 text-gray-500">Loading academic structure...</span></div>
-                            ) : departments.length === 0 ? (
-                                <p className="text-gray-500 dark:text-gray-400">No courses assigned to you or no institution structure defined.</p>
-                            ) : (
-                                <div>
-                                    {departments.map(department => (
-                                        <div key={department.id} className="mb-4 p-3 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-700">
-                                            <h4 className="font-bold text-lg text-gray-700 dark:text-gray-100 mb-2 flex items-center">
-                                                <Layers size={20} className="mr-2 text-blue-500" />
-                                                {department.name}
-                                            </h4>
-                                            <div className="ml-4 border-l pl-4 border-gray-300 dark:border-gray-600">
-                                                {department.semesters.length > 0 ? (
-                                                    department.semesters.map(semester => (
-                                                        <div key={semester.id} className="mb-3 p-2 border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800">
-                                                            <h5 className="font-semibold text-md text-gray-700 dark:text-gray-200 mb-2 flex items-center">
-                                                                <Calendar size={18} className="mr-2 text-green-500" />
-                                                                {semester.name}
-                                                            </h5>
-                                                            <div className="ml-4 border-l pl-4 border-gray-200 dark:border-gray-700">
-                                                                {semester.courses.length > 0 ? (
-                                                                    semester.courses.map(course => (
-                                                                        <div 
-                                                                            key={course.id} 
-                                                                            className="p-2 mb-1 rounded-md flex items-center justify-between bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                                                                        >
-                                                                            <span className="flex items-center">
-                                                                                <BookOpen size={16} className="mr-2 text-purple-500" />
-                                                                                {course.courseName} ({course.courseCode})
-                                                                            </span>
-                                                                            {/* Optionally add more course details here */}
-                                                                        </div>
-                                                                    ))
-                                                                ) : (
-                                                                    <p className="text-sm text-gray-500 dark:text-gray-400">No courses in this semester for you.</p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    <p className="text-sm text-gray-500 dark:text-gray-400">No semesters in this department for you.</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                            <h3 className="text-lg font-medium mb-2">Actions</h3>
+                            <p>Navigate using the sidebar to manage courses and marks.</p>
                         </div>
-
-                        <AddCourseForm facultyProfile={facultyProfile} onCourseAdded={() => { fetchFacultyCourses(facultyProfile.uid); fetchInstitutionStructure(facultyProfile.uid); }} />
-                        <ManageMarks facultyProfile={facultyProfile} courses={facultyCourses} />
                     </div>
-                );
-            case 'students':
-                return (
-                    <div className="p-6">
-                        <h2 className="text-2xl font-bold mb-4">Manage My Students</h2>
-                        <p>Student management details will go here.</p>
-                    </div>
-                );
-            default:
-                return <p className="p-6 text-gray-700 dark:text-gray-300">Select a view from the sidebar.</p>;
+                </div>
+            );
+        } else if (activeView === 'courses') {
+             return (
+                <div>
+                    <AddCourseForm facultyProfile={facultyProfile} onCourseAdded={fetchFacultyData} />
+                    {loadingCourses ? <LoadingSpinner /> : <ListCourses courses={courses} onSelectCourse={() => {}} />}
+                </div>
+            );
+        } else if (activeView === 'marks') {
+            return (
+                <div>
+                    {loadingCourses ? <LoadingSpinner /> : <ManageMarks facultyProfile={facultyProfile} courses={courses} />}
+                </div>
+            );
         }
+        return <p>Select an option from the sidebar.</p>;
     };
 
     return (
         <FacultyLayout>
-            {renderContent()}
+           {renderContent()}
         </FacultyLayout>
     );
 };
