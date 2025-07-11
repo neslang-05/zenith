@@ -131,12 +131,11 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children }) => {
 
   const navItems = [
     { iconElement: <Home size={22} />, label: 'Dashboard', href: '/student' },
-    { iconElement: <User size={22} />, label: 'My Profile', href: '/student/profile' },
     { iconElement: <BookOpen size={22} />, label: 'Courses', href: '/student?view=courses' },
     { iconElement: <ClipboardList size={22} />, label: 'My Marks', href: '/student/result' },// /student/result changed from /student/?view=result
     // { iconElement: <Briefcase size={22} />, label: 'Materials', href: '/student?view=materials' }, // From original
     // { iconElement: <BarChart size={22} />, label: 'Results (Legacy)', href: '/student/result' }, // Keep legacy or integrate
-    { iconElement: <Settings size={22} />, label: 'Settings', href: '/student/setting' },
+    // { iconElement: <Settings size={22} />, label: 'Settings', href: '/student/setting' },
   ];
 
   if (authLoading) {
