@@ -554,9 +554,26 @@ export const publishAdminEndTermMarks = async (
 // Get all marks for a student in a specific course
 export const getStudentMarksForCourse = async (courseId: string, studentUid: string): Promise<(MarksData & { id: string }) | null> => {
     try {
-        const marksDocRef = doc(db, 'courses', courseId, 'marks', studentUid);
-        const docSnap = await getDoc(marksDocRef);
-        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as MarksData & { id: string } : null;
+        // Attempt to get marks from the main /courses/{courseId}/marks/{studentUid} path (for internal/mid-term)
+        const facultyMarksRef = doc(db, 'courses', courseId, 'marks', studentUid);
+        const facultyMarksSnap = await getDoc(facultyMarksRef);
+        const facultyMarksData = facultyMarksSnap.exists() ? facultyMarksSnap.data() : {};
+
+        // Attempt to get marks from the /studentMarks/{studentUid}/courses/{courseId} path (for admin end-term)
+        const adminMarksRef = doc(db, 'studentMarks', studentUid, 'courses', courseId);
+        const adminMarksSnap = await getDoc(adminMarksRef);
+        const adminMarksData = adminMarksSnap.exists() ? adminMarksSnap.data() : {};
+
+        // Merge marks data, with admin marks taking precedence for end-term related fields
+        const mergedMarksData = {
+            ...facultyMarksData,
+            ...adminMarksData,
+        } as MarksData;
+
+        if (facultyMarksSnap.exists() || adminMarksSnap.exists()) {
+            return { id: studentUid, ...mergedMarksData }; // Use studentUid as the ID for consistency
+        }
+        return null;
     } catch (error) {
         console.error(`Error fetching marks for student ${studentUid} in course ${courseId}:`, error);
         throw error;
@@ -638,6 +655,9 @@ export interface StudentResult extends DocumentData {
     midTermPublished?: boolean;
     endTermPublished?: boolean;
     grade?: string | null;
+    semesterId?: string; // Add semesterId to the interface
+    academicYear?: string; // Add academicYear to the interface
+    semesterName?: string; // Add semesterName to the interface
 }
 
 export const getStudentResults = async (studentUid: string): Promise<StudentResult[]> => {
@@ -649,21 +669,45 @@ export const getStudentResults = async (studentUid: string): Promise<StudentResu
         // For each course, get the student's marks
         const resultsPromises = registeredCoursesSnap.docs.map(async (courseDoc) => {
             const courseId = courseDoc.id;
-            const marksRef = doc(db, 'courses', courseId, 'marks', studentUid);
-            const marksSnap = await getDoc(marksRef);
             
-            // Get course details
+            // Attempt to get faculty-entered marks (internal, mid-term) from /courses/{courseId}/marks/{studentUid}
+            const facultyMarksRef = doc(db, 'courses', courseId, 'marks', studentUid);
+            const facultyMarksSnap = await getDoc(facultyMarksRef);
+            const facultyMarksData = facultyMarksSnap.exists() ? facultyMarksSnap.data() : {};
+
+            // Attempt to get admin-entered end-term marks from /studentMarks/{studentUid}/courses/{courseId}
+            const adminMarksRef = doc(db, 'studentMarks', studentUid, 'courses', courseId);
+            const adminMarksSnap = await getDoc(adminMarksRef);
+            const adminMarksData = adminMarksSnap.exists() ? adminMarksSnap.data() : {};
+
+            // Merge marks data, with admin marks taking precedence for end-term related fields
+            const mergedMarksData = {
+                ...facultyMarksData,
+                ...adminMarksData, // This will override endTermMarks, endTermPublished etc. if present in adminMarksData
+            };
+
+            // Get course details (still needed from the main 'courses' collection)
             const courseRef = doc(db, 'courses', courseId);
             const courseSnap = await getDoc(courseRef);
             const courseData = courseSnap.data() as CourseData | undefined;
-            
-            if (marksSnap.exists() && courseData) {
+
+            let semesterName: string | undefined;
+            if (courseData?.departmentId && courseData?.semesterId) {
+                const semesterDocRef = doc(db, 'departments', courseData.departmentId, 'semesters', courseData.semesterId);
+                const semesterSnap = await getDoc(semesterDocRef);
+                semesterName = semesterSnap.exists() ? semesterSnap.data()?.name : undefined;
+            }
+
+            if ((facultyMarksSnap.exists() || adminMarksSnap.exists()) && courseData) {
                 return {
-                    id: marksSnap.id,
+                    id: courseId, // Use courseId as the id for the result object
                     courseId,
                     courseName: courseData.courseName,
                     courseCode: courseData.courseCode,
-                    ...marksSnap.data()
+                    semesterId: courseData.semesterId, // Include semesterId from courseData
+                    academicYear: courseData.academicYear, // Include academicYear from courseData
+                    semesterName, // Include semesterName
+                    ...mergedMarksData,
                 } as StudentResult;
             }
             return null;

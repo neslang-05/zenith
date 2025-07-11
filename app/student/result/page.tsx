@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import StudentLayout from '../StudentLayout';
 import { FileText, Download, Filter, Search, ChevronDown, AlertCircle } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { auth, getUserProfile, getStudentResults, StudentResult } from '@/lib/firebase';
 import { DocumentData } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -205,6 +207,47 @@ const StudentResultPage = () => {
   const [loading, setLoading] = useState(true);
   const [selectedSemester, setSelectedSemester] = useState<number | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  const handleDownloadPdf = async () => {
+    if (resultsRef.current) {
+      const input = resultsRef.current;
+      const studentName = profileData?.name || currentUserUid || 'Student';
+      const fileName = `results_${studentName.replace(/\s/g, '_')}.pdf`;
+
+      try {
+        const canvas = await html2canvas(input, {
+          scale: 2, // Increase scale for better resolution
+          useCORS: true, // If you have external images/fonts
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgWidth = 210; // A4 width in mm
+        const pageHeight = 297; // A4 height in mm
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+
+        while (heightLeft >= 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+
+        pdf.save(fileName);
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+        alert('Failed to generate PDF. Please try again.');
+      }
+    } else {
+      alert('No results content to download.');
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -235,9 +278,17 @@ const StudentResultPage = () => {
         
         // Map Firestore data to Result interface
         const mappedResults: Result[] = (resultsData as StudentResult[]).map((r) => {
-          // Get semester and academicYear from courseData if present, else fallback
-          const semester = (r as any).semester || 0;
-          const academicYear = (r as any).academicYear || '';
+          console.log('Raw StudentResult for course:', r.courseName, r);
+          const semesterMatch = r.semesterName?.match(/\d+/); // Use optional chaining
+          let semester = 0; // Default to 0
+
+          if (semesterMatch && semesterMatch[0]) {
+            const parsedSemester = parseInt(semesterMatch[0], 10); // Always use radix 10
+            if (!isNaN(parsedSemester)) {
+              semester = parsedSemester;
+            }
+          }
+          const academicYear = r.academicYear || '';
 
           // Ensure marks are numbers
           const internal = r.internalMarks !== null && r.internalMarks !== undefined ? Number(r.internalMarks) : null;
@@ -390,18 +441,20 @@ const StudentResultPage = () => {
 
           {/* Download Button (currently non-functional placeholder) */}
           <button
-            onClick={() => alert('Download functionality not yet implemented')} // Placeholder action
+            onClick={handleDownloadPdf}
             className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           >
             <Download className="h-4 w-4 mr-2" />
-            Download Results
+            Download as PDF
           </button>
         </div>
 
         {semesterGroups.length > 0 ? (
-          semesterGroups.map((group) => (
-            <SemesterResults key={`${group.semester}-${group.academicYear}`} semesterGroup={group} />
-          ))
+          <div ref={resultsRef}>
+            {semesterGroups.map((group) => (
+              <SemesterResults key={`${group.semester}-${group.academicYear}`} semesterGroup={group} />
+            ))}
+          </div>
         ) : (
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
             <div className="flex">
