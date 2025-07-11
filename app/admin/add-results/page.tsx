@@ -4,8 +4,12 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { User } from 'firebase/auth';
 import { DocumentData } from 'firebase/firestore';
+import { CheckCircle, XCircle, Save, Send } from 'lucide-react'; // Import necessary icons
 // Ensure necessary functions are imported
-import { auth, findStudentByRegNum, addResult } from '@/lib/firebase';
+import { auth, findStudentByRegNum, addGenericResult, getAllCourses, getRegisteredStudentsForCourse,
+    upsertAdminEndTermMarks, publishAdminEndTermMarks, getStudentMarksForCourse, CourseData, MarksData,
+    getDepartments, getSemesters, getCoursesByDepartmentAndSemester
+} from '@/lib/firebase';
 
 // Simple Loading Spinner Component
 const LoadingSpinner = ({ size = 'h-5 w-5' }: { size?: string }) => (
@@ -145,7 +149,7 @@ const AddResultsPage = () => {
             };
             console.log("Adding result data:", resultData); // Debug log
 
-            await addResult(resultData);
+            await addGenericResult(resultData);
 
             setFormSuccess(`Result added successfully for ${foundStudent.name} (${foundStudent.registrationNumber})!`);
             clearResultForm(); // Clear form for next entry for the *same* student
@@ -247,17 +251,338 @@ const AddResultsPage = () => {
                          <div> <label htmlFor="academicYear" className="block text-sm font-medium text-gray-700 mb-1">Academic Year (Optional)</label> <input type="text" id="academicYear" value={academicYear} onChange={(e) => setAcademicYear(e.target.value)} disabled={isAddingResult} placeholder="e.g., 2024-2025" className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:bg-gray-100"/> </div>
 
                          {/* Submit Button */}
-                        <div className="text-right pt-2">
-                            <button type="submit" className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-60 disabled:cursor-not-allowed" disabled={isAddingResult}>
-                                {isAddingResult ? <LoadingSpinner size="h-4 w-4 mr-2"/> : null}
-                                {isAddingResult ? 'Adding Result...' : 'Add Result'}
-                            </button>
-                        </div>
-                    </form>
+                        <button type="submit" disabled={isAddingResult} className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-60 disabled:cursor-not-allowed">
+                             {isAddingResult ? <LoadingSpinner size="h-4 w-4 mr-2"/> : (
+                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                 </svg>
+                             )}
+                             {isAddingResult ? 'Adding...' : 'Add Result'}
+                        </button>
+                     </form>
                  </section>
             )}
-         </div>
-     );
- };
 
- export default AddResultsPage;
+            {/* Admin Course Marks Section */}
+            <CourseMarksAdminContent adminUser={currentUser} />
+        </div>
+    );
+};
+
+
+export type Course = CourseData & { id: string };
+
+type AdminMarksData = MarksData & { studentUid: string, courseId?: string, courseName?: string, marks: string };
+
+// Admin component for viewing and managing end-term marks for courses
+// This will be a separate, more complex component that handles course selection, student listing, and marks entry
+interface CourseMarksAdminContentProps {
+    adminUser: User | null; // Ensure adminUser is passed and typed correctly
+}
+
+const CourseMarksAdminContent = ({ adminUser }: CourseMarksAdminContentProps) => {
+    const [selectedDepartment, setSelectedDepartment] = useState<string>('');
+    const [selectedSemester, setSelectedSemester] = useState<string>('');
+    const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+    const [semesters, setSemesters] = useState<{ id: string; name: string }[]>([]);
+    const [allCourses, setAllCourses] = useState<Course[]>([]); // To store all available courses
+    const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+    const [registeredStudents, setRegisteredStudents] = useState<FoundStudent[]>([]);
+    const [courseMarks, setCourseMarks] = useState<{ [studentUid: string]: AdminMarksData }>({});
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+    const [marksChanged, setMarksChanged] = useState<Set<string>>(new Set()); // Track which students' marks have changed
+    const [isPublishing, setIsPublishing] = useState<string | null>(null); // Track publishing state per student
+    const [isSaving, setIsSaving] = useState<string | null>(null); // Track saving state per student
+
+
+    useEffect(() => {
+        const fetchInitialData = async () => {
+            setLoading(true);
+            try {
+                const fetchedDepartments = await getDepartments();
+                setDepartments(fetchedDepartments);
+                const fetchedSemesters = await getSemesters(selectedDepartment);
+                setSemesters(fetchedSemesters);
+            } catch (err) {
+                console.error("Error fetching departments or semesters:", err);
+                setError("Failed to load departments or semesters.");
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchInitialData();
+    }, [selectedDepartment]);
+
+    // Fetch courses based on selected department and semester
+    useEffect(() => {
+        const fetchCourses = async () => {
+            if (selectedDepartment && selectedSemester) {
+                setLoading(true);
+                setError(null);
+                try {
+                    const courses = await getCoursesByDepartmentAndSemester(selectedDepartment, selectedSemester);
+                    setAllCourses(courses);
+                    setSelectedCourse(null); // Reset selected course when filters change
+                    setRegisteredStudents([]); // Clear students
+                    setCourseMarks({}); // Clear marks
+                } catch (err) {
+                    console.error("Error fetching courses:", err);
+                    setError("Failed to load courses for the selected department and semester.");
+                } finally {
+                    setLoading(false);
+                }
+            } else {
+                setAllCourses([]); // Clear courses if filters are not fully selected
+            }
+        };
+        fetchCourses();
+    }, [selectedDepartment, selectedSemester]);
+
+
+    const handleCourseSelect = async (courseId: string) => {
+        setLoading(true);
+        setError(null);
+        setSuccess(null);
+        setMarksChanged(new Set()); // Reset changed marks
+        try {
+            const course = allCourses.find(c => c.id === courseId);
+            if (course) {
+                setSelectedCourse(course);
+
+                // Fetch registered students for the selected course
+                const students = await getRegisteredStudentsForCourse(course.id);
+                setRegisteredStudents(students);
+
+                // Fetch existing marks for these students for the selected course
+                const marksMap: { [key: string]: AdminMarksData } = {};
+                for (const student of students) {
+                    const existingMarks = await getStudentMarksForCourse(student.id, course.id);
+                    // Initialize with proper structure if no marks exist
+                    marksMap[student.id] = {
+                        ...existingMarks,
+                        studentUid: student.id,
+                        marks: (existingMarks?.endTermMarks as string) || '' // Ensure marks is always a string
+                    } as AdminMarksData; // Cast to ensure type compatibility
+                }
+                setCourseMarks(marksMap);
+            } else {
+                setError("Selected course not found.");
+            }
+        } catch (err) {
+            console.error("Error loading course details or student marks:", err);
+            setError("Failed to load course details or student marks.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleEndTermMarkChange = (studentUid: string, value: string) => {
+        setCourseMarks(prev => ({
+            ...prev,
+            [studentUid]: { ...prev[studentUid], marks: value, courseId: selectedCourse?.id, courseName: selectedCourse?.courseName } // Ensure courseId and courseName are set
+        }));
+        setMarksChanged(prev => new Set(prev).add(studentUid)); // Mark student's score as changed
+        setSuccess(null); // Clear success message on change
+    };
+
+
+    const handleSaveEndTermMark = async (studentUid: string) => {
+        if (!adminUser) {
+            setError("Authentication error: Admin user not found.");
+            return;
+        }
+        if (!selectedCourse) {
+            setError("No course selected.");
+            return;
+        }
+
+        const studentMarks = courseMarks[studentUid];
+        if (!studentMarks || !studentMarks.marks.trim()) {
+            setError("Marks cannot be empty for saving.");
+            return;
+        }
+
+        setIsSaving(studentUid); // Set saving state for this student
+        setError(null);
+        try {
+            await upsertAdminEndTermMarks(
+                studentUid,
+                selectedCourse.id,
+                studentMarks.marks.trim(),
+                adminUser.uid,
+                selectedCourse.courseName // Pass course name
+            );
+            setSuccess(`Marks for ${registeredStudents.find(s => s.id === studentUid)?.name} saved successfully.`);
+            setMarksChanged(prev => { const newState = new Set(prev); newState.delete(studentUid); return newState; }); // Remove from changed set
+
+        } catch (err) {
+            console.error("Error saving marks:", err);
+            setError(`Failed to save marks for ${registeredStudents.find(s => s.id === studentUid)?.name}.`);
+        } finally {
+            setIsSaving(null); // Clear saving state
+        }
+    };
+
+    const handlePublishEndTermMark = async (studentUid: string) => {
+        if (!adminUser) {
+            setError("Authentication error: Admin user not found.");
+            return;
+        }
+        if (!selectedCourse) {
+            setError("No course selected.");
+            return;
+        }
+
+        const studentMarks = courseMarks[studentUid];
+        if (!studentMarks || !studentMarks.marks.trim()) {
+            setError("Marks cannot be empty for publishing.");
+            return;
+        }
+
+        setIsPublishing(studentUid); // Set publishing state for this student
+        setError(null);
+        try {
+            await publishAdminEndTermMarks(
+                studentUid,
+                selectedCourse.id,
+                studentMarks.marks.trim(),
+                adminUser.uid,
+                selectedCourse.courseName
+            );
+            setSuccess(`Marks for ${registeredStudents.find(s => s.id === studentUid)?.name} published successfully.`);
+
+        } catch (err) {
+            console.error("Error publishing marks:", err);
+            setError(`Failed to publish marks for ${registeredStudents.find(s => s.id === studentUid)?.name}.`);
+        } finally {
+            setIsPublishing(null); // Clear publishing state
+        }
+    };
+
+    return (
+        <section className="mt-10 bg-white shadow-md rounded-lg p-6">
+            <h2 className="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">3. Add End-Term Marks by Course</h2>
+            {loading && <div className="text-center py-4"><LoadingSpinner /> <p className="mt-2 text-gray-600">Loading data...</p></div>}
+            {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-3 rounded text-sm mb-4" role="alert">{error}</div>}
+            {success && <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-3 rounded text-sm mb-4" role="alert">{success}</div>}
+
+            {/* Department and Semester Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label htmlFor="department-select" className="block text-sm font-medium text-gray-700 mb-1">Select Department</label>
+                    <select
+                        id="department-select"
+                        value={selectedDepartment}
+                        onChange={(e) => setSelectedDepartment(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                        <option value="">-- Select Department --</option>
+                        {departments.map((dept) => (
+                            <option key={dept.id} value={dept.id}>{dept.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="semester-select" className="block text-sm font-medium text-gray-700 mb-1">Select Semester</label>
+                    <select
+                        id="semester-select"
+                        value={selectedSemester}
+                        onChange={(e) => setSelectedSemester(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                        <option value="">-- Select Semester --</option>
+                        {semesters.map((sem) => (
+                            <option key={sem.id} value={sem.id}>{sem.name}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            {/* Course Selection */}
+            {selectedDepartment && selectedSemester && allCourses.length > 0 && (
+                <div className="mb-6">
+                    <label htmlFor="course-select" className="block text-sm font-medium text-gray-700 mb-1">Select Course</label>
+                    <select
+                        id="course-select"
+                        value={selectedCourse?.id || ''}
+                        onChange={(e) => handleCourseSelect(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                        <option value="">-- Select Course --</option>
+                        {allCourses.map((course) => (
+                            <option key={course.id} value={course.id}>{course.courseName} ({course.courseCode})</option>
+                        ))}
+                    </select>
+                </div>
+            )}
+            {selectedDepartment && selectedSemester && allCourses.length === 0 && !loading && !error && (
+                <p className="text-gray-600 text-sm italic">No courses found for the selected department and semester.</p>
+            )}
+
+
+            {/* Registered Students and Marks Entry */}
+            {selectedCourse && (registeredStudents.length > 0 ? (
+                <div className="mt-8">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-3">Students Registered for {selectedCourse.courseName}</h3>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registration No.</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Marks</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {registeredStudents.map((student) => (
+                                    <tr key={student.id}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{student.registrationNumber}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{student.name}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <input
+                                                type="text"
+                                                value={courseMarks[student.id]?.marks || ''}
+                                                onChange={(e) => handleEndTermMarkChange(student.id, e.target.value)}
+                                                className="w-32 px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                                placeholder="Enter marks"
+                                            />
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div className="flex items-center space-x-2">
+                                                {marksChanged.has(student.id) && (
+                                                    <button
+                                                        onClick={() => handleSaveEndTermMark(student.id)}
+                                                        disabled={isSaving === student.id}
+                                                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                                                    >
+                                                        {isSaving === student.id ? <LoadingSpinner size="h-3 w-3 mr-1"/> : <Save className="h-3 w-3 mr-1" />}
+                                                        {isSaving === student.id ? 'Saving...' : 'Save'}
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => handlePublishEndTermMark(student.id)}
+                                                    disabled={isPublishing === student.id || !courseMarks[student.id]?.marks.trim() || marksChanged.has(student.id)}
+                                                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                                                >
+                                                    {isPublishing === student.id ? <LoadingSpinner size="h-3 w-3 mr-1"/> : <Send className="h-3 w-3 mr-1" />}
+                                                    {isPublishing === student.id ? 'Publishing...' : 'Publish'}
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : (
+                <p className="text-gray-600 mt-4">No students registered for this course yet.</p>
+            ))}
+        </section>
+    );
+};
+
+export default AddResultsPage;

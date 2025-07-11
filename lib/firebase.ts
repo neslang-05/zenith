@@ -255,9 +255,11 @@ export interface CourseData {
     courseCode: string;
     facultyUid: string;
     facultyName: string; // Denormalized
-    academicYear: string;
+    academicYear?: string; // Make academicYear optional or ensure it's provided upon course creation
     description?: string;
     credits?: number;
+    departmentId?: string; // New: Add departmentId
+    semesterId?: string; // New: Add semesterId
     // any other course details
 }
 export const addCourse = async (courseData: CourseData): Promise<DocumentReference> => {
@@ -304,6 +306,26 @@ export const getCourseById = async (courseId: string): Promise<(CourseData & { i
         return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as CourseData & { id: string } : null;
     } catch (error) {
         console.error(`Error fetching course ${courseId}:`, error);
+        throw error;
+    }
+};
+
+export const getCoursesByDepartmentAndSemester = async (
+    departmentId: string,
+    semesterId: string
+): Promise<(CourseData & { id: string })[]> => {
+    try {
+        const coursesRef = collection(db, 'courses');
+        const q = query(
+            coursesRef,
+            where('departmentId', '==', departmentId),
+            where('semesterId', '==', semesterId),
+            orderBy('createdAt', 'desc')
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CourseData & { id: string }));
+    } catch (error) {
+        console.error(`Error fetching courses for department ${departmentId} and semester ${semesterId}:`, error);
         throw error;
     }
 };
@@ -480,62 +502,49 @@ export const publishFacultyMarks = async (
 
 // Admin adds/updates end-term marks
 export const upsertAdminEndTermMarks = async (
-    courseId: string,
     studentUid: string,
-    marks: { endTermMarks: number | string },
-    adminUid: string
+    courseId: string,
+    marks: string,
+    adminUid: string,
+    courseName?: string
 ): Promise<void> => {
     try {
-        const marksDocRef = doc(db, 'courses', courseId, 'marks', studentUid);
-        const dataToUpdate: Partial<MarksData & { updatedAt: Timestamp }> = {
-            ...marks,
+        const marksDocRef = doc(db, "studentMarks", studentUid, "courses", courseId);
+        await setDoc(marksDocRef, {
+            endTermMarks: marks,
             lastUpdatedByAdmin: adminUid,
-            updatedAt: serverTimestamp() as Timestamp
-        };
-        await setDoc(marksDocRef, dataToUpdate, { merge: true });
-        console.log(`Admin end-term marks updated for student ${studentUid} in course ${courseId}`);
+            adminPublishedAt: serverTimestamp(),
+            courseName: courseName,
+            courseId: courseId,
+            studentUid: studentUid
+        }, { merge: true });
+        console.log(`Admin end-term marks for student ${studentUid} in course ${courseId} upserted.`);
     } catch (error) {
-        console.error("Error updating admin end-term marks:", error);
+        console.error("Error upserting admin end-term marks:", error);
         throw error;
     }
 };
 
 // Admin publishes end-term marks
 export const publishAdminEndTermMarks = async (
-    courseId: string,
     studentUid: string,
-    adminUid: string
+    courseId: string,
+    marks: string,
+    adminUid: string,
+    courseName?: string
 ): Promise<void> => {
     try {
-        const marksDocRef = doc(db, 'courses', courseId, 'marks', studentUid);
+        const marksDocRef = doc(db, "studentMarks", studentUid, "courses", courseId);
         await updateDoc(marksDocRef, {
             endTermPublished: true,
             lastUpdatedByAdmin: adminUid,
-            adminPublishedAt: serverTimestamp()
+            adminPublishedAt: serverTimestamp(),
+            endTermMarks: marks,
+            courseName: courseName,
+            courseId: courseId,
+            studentUid: studentUid
         });
-
-        // Get course and student details for email
-        const [courseDoc, studentDoc] = await Promise.all([
-            getCourseById(courseId),
-            getUserProfile(studentUid)
-        ]);
-
-        if (courseDoc && studentDoc) {
-            try {
-                await sendMarksPublishedEmail(
-                    studentDoc.email,
-                    studentDoc.name,
-                    courseDoc.courseName,
-                    'End-Term'
-                );
-                console.log(`End-term marks published email sent to ${studentDoc.email}`);
-            } catch (emailError) {
-                console.error("Error sending end-term marks published email:", emailError);
-                // Don't throw here - we want the marks publication to succeed even if email fails
-            }
-        }
-
-        console.log(`End-term marks published by admin for student ${studentUid} in course ${courseId}`);
+        console.log(`Admin end-term marks for student ${studentUid} in course ${courseId} published.`);
     } catch (error) {
         console.error("Error publishing admin end-term marks:", error);
         throw error;
@@ -545,9 +554,26 @@ export const publishAdminEndTermMarks = async (
 // Get all marks for a student in a specific course
 export const getStudentMarksForCourse = async (courseId: string, studentUid: string): Promise<(MarksData & { id: string }) | null> => {
     try {
-        const marksDocRef = doc(db, 'courses', courseId, 'marks', studentUid);
-        const docSnap = await getDoc(marksDocRef);
-        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as MarksData & { id: string } : null;
+        // Attempt to get marks from the main /courses/{courseId}/marks/{studentUid} path (for internal/mid-term)
+        const facultyMarksRef = doc(db, 'courses', courseId, 'marks', studentUid);
+        const facultyMarksSnap = await getDoc(facultyMarksRef);
+        const facultyMarksData = facultyMarksSnap.exists() ? facultyMarksSnap.data() : {};
+
+        // Attempt to get marks from the /studentMarks/{studentUid}/courses/{courseId} path (for admin end-term)
+        const adminMarksRef = doc(db, 'studentMarks', studentUid, 'courses', courseId);
+        const adminMarksSnap = await getDoc(adminMarksRef);
+        const adminMarksData = adminMarksSnap.exists() ? adminMarksSnap.data() : {};
+
+        // Merge marks data, with admin marks taking precedence for end-term related fields
+        const mergedMarksData = {
+            ...facultyMarksData,
+            ...adminMarksData,
+        } as MarksData;
+
+        if (facultyMarksSnap.exists() || adminMarksSnap.exists()) {
+            return { id: studentUid, ...mergedMarksData }; // Use studentUid as the ID for consistency
+        }
+        return null;
     } catch (error) {
         console.error(`Error fetching marks for student ${studentUid} in course ${courseId}:`, error);
         throw error;
@@ -558,16 +584,21 @@ export const getStudentMarksForCourse = async (courseId: string, studentUid: str
 export const getAllMarksForCourse = async (courseId: string): Promise<(MarksData & { studentUid: string; id: string })[]> => {
     try {
         const marksCollectionRef = collection(db, 'courses', courseId, 'marks');
+        console.log(`[Firebase] Querying marks from path: courses/${courseId}/marks`);
         const q = query(marksCollectionRef, orderBy('studentUid', 'asc')); // Order by studentUid for consistency
         const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ 
+        console.log(`[Firebase] Marks querySnapshot size: ${querySnapshot.size}`);
+        if (querySnapshot.empty) {
+            console.warn(`[Firebase] No marks found for courseId: ${courseId}. Query result is empty.`);
+        }
+        return querySnapshot.docs.map(doc => ({
             id: doc.id, // Explicitly add id
             studentUid: doc.id, // studentUid is also the doc.id in this subcollection
-            ...doc.data() 
+            ...doc.data()
         }) as MarksData & { studentUid: string; id: string });
-    } catch (error) {
-        console.error("Error fetching all marks for course:", error);
-        throw error;
+    } catch (error: any) {
+        console.error("[Firebase] Error fetching all marks for course:", error);
+        throw error; // Re-throw to propagate error to the caller
     }
 };
 
@@ -624,6 +655,9 @@ export interface StudentResult extends DocumentData {
     midTermPublished?: boolean;
     endTermPublished?: boolean;
     grade?: string | null;
+    semesterId?: string; // Add semesterId to the interface
+    academicYear?: string; // Add academicYear to the interface
+    semesterName?: string; // Add semesterName to the interface
 }
 
 export const getStudentResults = async (studentUid: string): Promise<StudentResult[]> => {
@@ -635,21 +669,45 @@ export const getStudentResults = async (studentUid: string): Promise<StudentResu
         // For each course, get the student's marks
         const resultsPromises = registeredCoursesSnap.docs.map(async (courseDoc) => {
             const courseId = courseDoc.id;
-            const marksRef = doc(db, 'courses', courseId, 'marks', studentUid);
-            const marksSnap = await getDoc(marksRef);
             
-            // Get course details
+            // Attempt to get faculty-entered marks (internal, mid-term) from /courses/{courseId}/marks/{studentUid}
+            const facultyMarksRef = doc(db, 'courses', courseId, 'marks', studentUid);
+            const facultyMarksSnap = await getDoc(facultyMarksRef);
+            const facultyMarksData = facultyMarksSnap.exists() ? facultyMarksSnap.data() : {};
+
+            // Attempt to get admin-entered end-term marks from /studentMarks/{studentUid}/courses/{courseId}
+            const adminMarksRef = doc(db, 'studentMarks', studentUid, 'courses', courseId);
+            const adminMarksSnap = await getDoc(adminMarksRef);
+            const adminMarksData = adminMarksSnap.exists() ? adminMarksSnap.data() : {};
+
+            // Merge marks data, with admin marks taking precedence for end-term related fields
+            const mergedMarksData = {
+                ...facultyMarksData,
+                ...adminMarksData, // This will override endTermMarks, endTermPublished etc. if present in adminMarksData
+            };
+
+            // Get course details (still needed from the main 'courses' collection)
             const courseRef = doc(db, 'courses', courseId);
             const courseSnap = await getDoc(courseRef);
             const courseData = courseSnap.data() as CourseData | undefined;
-            
-            if (marksSnap.exists() && courseData) {
+
+            let semesterName: string | undefined;
+            if (courseData?.departmentId && courseData?.semesterId) {
+                const semesterDocRef = doc(db, 'departments', courseData.departmentId, 'semesters', courseData.semesterId);
+                const semesterSnap = await getDoc(semesterDocRef);
+                semesterName = semesterSnap.exists() ? semesterSnap.data()?.name : undefined;
+            }
+
+            if ((facultyMarksSnap.exists() || adminMarksSnap.exists()) && courseData) {
                 return {
-                    id: marksSnap.id,
+                    id: courseId, // Use courseId as the id for the result object
                     courseId,
                     courseName: courseData.courseName,
                     courseCode: courseData.courseCode,
-                    ...marksSnap.data()
+                    semesterId: courseData.semesterId, // Include semesterId from courseData
+                    academicYear: courseData.academicYear, // Include academicYear from courseData
+                    semesterName, // Include semesterName
+                    ...mergedMarksData,
                 } as StudentResult;
             }
             return null;
@@ -747,10 +805,16 @@ export const deleteDepartment = async (id: string) => {
 };
 
 // Semesters (subcollection)
-export const getSemesters = async (departmentId: string) => {
-  const ref = collection(db, 'departments', departmentId, 'semesters');
-  const snap = await getDocs(ref);
-  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+export const getSemesters = async (departmentId: string): Promise<(DocumentData & { id: string, name: string })[]> => {
+    try {
+        const semestersCol = collection(db, 'departments', departmentId, 'semesters');
+        const q = query(semestersCol, orderBy('name'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name }));
+    } catch (error) {
+        console.error("Error getting semesters:", error);
+        throw error;
+    }
 };
 
 export const addSemester = async (departmentId: string, name: string) => {
@@ -788,37 +852,81 @@ export const getCourses = async (departmentId: string, semesterId: string): Prom
   }) as CourseData & { id: string; createdAt?: Timestamp; });
 };
 
-export const addCourseToSemester = async (departmentId: string, semesterId: string, course: { name: string; code: string }) => {
-  const coursesSubcollectionRef = collection(db, 'departments', departmentId, 'semesters', semesterId, 'courses');
-  const docRef = await addDoc(coursesSubcollectionRef, course);
+export const addCourseToSemester = async (departmentId: string, semesterId: string, course: { name: string; code: string }, facultyUid: string, facultyName: string, academicYear?: string) => {
+    try {
+        // Create a new course document in the 'courses' collection
+        const coursesCollectionRef = collection(db, 'courses');
+        const newCourseRef = await addDoc(coursesCollectionRef, {
+            courseName: course.name,
+            courseCode: course.code,
+            facultyUid: facultyUid,
+            facultyName: facultyName,
+            departmentId: departmentId, // Store department ID
+            semesterId: semesterId,     // Store semester ID
+            academicYear: academicYear || null, // Store academic year if provided
+            createdAt: serverTimestamp(),
+        });
+        const courseId = newCourseRef.id;
 
-  // Also add to the top-level 'courses' collection for consistency and easier querying
-  const courseData = {
-    courseName: course.name,
-    courseCode: course.code,
-    departmentId: departmentId,
-    semesterId: semesterId,
-    // You might want to add other details here like facultyUid, academicYear, description etc.
-    // For now, these fields are minimal, assuming they will be filled later or are not critical for direct linking.
-    createdAt: serverTimestamp(),
-    institutionStructureCourseId: docRef.id // Link back to the subcollection document
-  };
-  await setDoc(doc(db, 'courses', docRef.id), courseData); // Use the same ID for top-level course
+        // Also add a reference or denormalized data under the specific semester
+        const semesterCoursesRef = doc(db, 'departments', departmentId, 'semesters', semesterId, 'courses', courseId);
+        await setDoc(semesterCoursesRef, {
+            name: course.name,
+            code: course.code,
+            facultyUid: facultyUid,
+            facultyName: facultyName,
+            academicYear: academicYear || null,
+            createdAt: serverTimestamp(),
+        });
 
-  return docRef.id;
+        return courseId;
+    } catch (error) {
+        console.error("Error adding course to semester:", error);
+        throw error;
+    }
 };
 
-export const updateCourseInSemester = async (departmentId: string, semesterId: string, courseId: string, course: { name: string; code: string }) => {
-  const ref = doc(db, 'departments', departmentId, 'semesters', semesterId, 'courses', courseId);
-  await updateDoc(ref, course);
+export const updateCourseInSemester = async (
+    departmentId: string,
+    semesterId: string,
+    courseId: string,
+    courseUpdateData: Partial<{ name: string; code: string; } & CourseData>
+) => {
+    const subcollectionRef = doc(db, 'departments', departmentId, 'semesters', semesterId, 'courses', courseId);
 
-  // Also update the top-level 'courses' collection
-  const courseData = {
-    courseName: course.name,
-    courseCode: course.code,
-    updatedAt: serverTimestamp()
-  };
-  await updateDoc(doc(db, 'courses', courseId), courseData);
+    // Prepare data for subcollection update (only name and code)
+    const subcollectionUpdate: Partial<{ name: string; code: string; facultyUid?: string; facultyName?: string; academicYear?: string; description?: string; credits?: number; updatedAt?: any; }> = {
+        updatedAt: serverTimestamp()
+    };
+    if (courseUpdateData.name !== undefined) subcollectionUpdate.name = courseUpdateData.name;
+    if (courseUpdateData.code !== undefined) subcollectionUpdate.code = courseUpdateData.code;
+    if (courseUpdateData.facultyUid !== undefined) subcollectionUpdate.facultyUid = courseUpdateData.facultyUid;
+    if (courseUpdateData.facultyName !== undefined) subcollectionUpdate.facultyName = courseUpdateData.facultyName;
+    if (courseUpdateData.academicYear !== undefined) subcollectionUpdate.academicYear = courseUpdateData.academicYear;
+    if (courseUpdateData.description !== undefined) subcollectionUpdate.description = courseUpdateData.description;
+    if (courseUpdateData.credits !== undefined) subcollectionUpdate.credits = courseUpdateData.credits;
+
+    if (Object.keys(subcollectionUpdate).length > 1) {
+        await updateDoc(subcollectionRef, subcollectionUpdate);
+    }
+
+    // Prepare data for top-level 'courses' collection update (all relevant CourseData fields)
+    const topLevelCourseRef = doc(db, 'courses', courseId);
+    const topLevelCourseUpdate: Partial<CourseData & { updatedAt: any }> = {
+        updatedAt: serverTimestamp()
+    };
+
+    if (courseUpdateData.courseName !== undefined) topLevelCourseUpdate.courseName = courseUpdateData.courseName;
+    if (courseUpdateData.courseCode !== undefined) topLevelCourseUpdate.courseCode = courseUpdateData.courseCode;
+    if (courseUpdateData.facultyUid !== undefined) topLevelCourseUpdate.facultyUid = courseUpdateData.facultyUid;
+    if (courseUpdateData.facultyName !== undefined) topLevelCourseUpdate.facultyName = courseUpdateData.facultyName;
+    if (courseUpdateData.academicYear !== undefined) topLevelCourseUpdate.academicYear = courseUpdateData.academicYear;
+    if (courseUpdateData.description !== undefined) topLevelCourseUpdate.description = courseUpdateData.description;
+    if (courseUpdateData.credits !== undefined) topLevelCourseUpdate.credits = courseUpdateData.credits;
+
+    if (Object.keys(topLevelCourseUpdate).length > 1) { // >1 because updatedAt is always there
+        await updateDoc(topLevelCourseRef, topLevelCourseUpdate);
+    }
 };
 
 export const deleteCourseInSemester = async (departmentId: string, semesterId: string, courseId: string) => {

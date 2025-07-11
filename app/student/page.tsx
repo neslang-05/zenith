@@ -5,7 +5,7 @@ import StudentLayout from './StudentLayout'; // Ensure this path is correct
 import { useSearchParams } from 'next/navigation';
 import {
     auth, getUserProfile, getAllCourses, getStudentRegisteredCourses, isStudentRegistered,
-    registerStudentForCourse, getStudentMarksForCourse, CourseData, MarksData
+    registerStudentForCourse, getStudentMarksForCourse, CourseData, MarksData, getCoursesByDepartmentAndSemester
 } from '@/lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
 import { DocumentData, Timestamp } from 'firebase/firestore';
@@ -160,15 +160,30 @@ const StudentDashboardPage = () => {
                 setStudentProfile(profile);
 
                 if (profile) {
-                    const [coursesFromDb, registeredCoursesFromDb] = await Promise.all([
-                        getAllCourses(),
+                    const studentDepartmentId = profile.departmentId;
+                    const studentSemesterId = profile.semesterId;
+
+                    let coursesForRegistration: StudentCourse[] = [];
+
+                    if (studentDepartmentId && studentSemesterId) {
+                        // Fetch courses specific to the student's department and semester
+                        coursesForRegistration = await getCoursesByDepartmentAndSemester(studentDepartmentId, studentSemesterId);
+                    } else {
+                        // Fallback: If student has no assigned department/semester, perhaps show all courses or none
+                        // For now, let's assume if these are not set, no specific courses are shown for registration.
+                        // You might want to change this logic based on your application's requirements.
+                        console.warn("Student profile is missing departmentId or semesterId. Cannot filter courses by semester.");
+                        // Optionally, you could fetch all courses: coursesForRegistration = await getAllCourses();
+                    }
+
+                    const [registeredCoursesFromDb] = await Promise.all([
                         getStudentRegisteredCourses(user.uid)
                     ]);
 
                     const registeredCourseIds = new Set(registeredCoursesFromDb.map(rc => rc.id));
                     
-                    // Fetch marks for registered courses
-                    const coursesWithMarksPromises = coursesFromDb.map(async (course) => {
+                    // Fetch marks for registered courses and mark registered status for all relevant courses
+                    const coursesWithMarksPromises = coursesForRegistration.map(async (course) => {
                         const isReg = registeredCourseIds.has(course.id);
                         let marksData: MarksData | null = null;
                         if (isReg) {
@@ -245,9 +260,14 @@ const StudentDashboardPage = () => {
                 </div>
             );
         } else if (activeView === 'courses') {
-            return <AvailableCourses courses={allCourses} studentProfile={studentProfile} onRegister={handleRegisterForCourse} refreshCourses={fetchStudentData} />;
+            return (
+                <div className="space-y-8">
+                    <AvailableCourses courses={allCourses} studentProfile={studentProfile} onRegister={handleRegisterForCourse} refreshCourses={fetchStudentData} />
+                    <MyMarks coursesWithMarks={allCourses.filter(c => c.isRegistered)} studentUid={studentProfile.uid} />
+                </div>
+            );
         } else if (activeView === 'marks') {
-            return <MyMarks coursesWithMarks={allCourses} studentUid={studentProfile.uid} />;
+            return <MyMarks coursesWithMarks={allCourses.filter(c => c.isRegistered)} studentUid={studentProfile.uid} />;
         }
         // Fallback for other views from the original student dashboard (lessons, materials etc.)
         // These were in the very first `page.tsx` file you provided.

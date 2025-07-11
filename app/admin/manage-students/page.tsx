@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { DocumentData } from 'firebase/firestore';
 // Ensure auth and necessary functions are imported
-import { auth, createUserWithEmailAndPassword, createUserProfile, getAllStudents } from '@/lib/firebase';
+import { auth, createUserWithEmailAndPassword, createUserProfile, getAllStudents, getDepartments, getSemesters } from '@/lib/firebase';
 
 // Simple Loading Spinner Component
 const LoadingSpinner = ({ size = 'h-5 w-5' }: { size?: string }) => (
@@ -17,6 +17,10 @@ interface Student { // Simpler interface for clarity
     name?: string;
     email?: string;
     registrationNumber?: string;
+    departmentId?: string; // New: Add departmentId
+    semesterId?: string;  // New: Add semesterId
+    departmentName?: string; // New: Denormalized for display
+    semesterName?: string;   // New: Denormalized for display
     // Add other fields you expect based on createUserProfile
 }
 
@@ -30,6 +34,10 @@ const ManageStudentsPage = () => {
     const [studentRegNum, setStudentRegNum] = useState('');
     const [studentEmail, setStudentEmail] = useState('');
     const [studentPassword, setStudentPassword] = useState('');
+    const [selectedDepartment, setSelectedDepartment] = useState(''); // New state for department dropdown
+    const [selectedSemester, setSelectedSemester] = useState('');     // New state for semester dropdown
+    const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]); // To store fetched departments
+    const [semesters, setSemesters] = useState<{ id: string; name: string }[]>([]);     // To store fetched semesters for selected department
     const [formError, setFormError] = useState<string | null>(null);
     const [formSuccess, setFormSuccess] = useState<string | null>(null);
     const [isCreatingStudent, setIsCreatingStudent] = useState(false);
@@ -48,6 +56,15 @@ const ManageStudentsPage = () => {
                 throw new Error("getAllStudents did not return an array.");
             }
 
+            // Fetch departments and semesters once to denormalize names
+            const allDepartments = await getDepartments();
+            const departmentMap = new Map(allDepartments.map(d => [d.id, d.name]));
+            const semesterMap = new Map<string, string>();
+            for (const dep of allDepartments) {
+                const sems = await getSemesters(dep.id);
+                sems.forEach((s: any) => semesterMap.set(s.id, s.name));
+            }
+
             // Explicitly map and validate structure if needed, or trust getAllStudents format
             const typedStudents: Student[] = studentListRaw.map((data: DocumentData & { id: string }) => {
                 // Basic check for expected fields
@@ -59,6 +76,10 @@ const ManageStudentsPage = () => {
                     name: data.name || 'N/A', // Provide fallbacks for missing optional data
                     email: data.email || 'N/A',
                     registrationNumber: data.registrationNumber || 'N/A',
+                    departmentId: data.departmentId || undefined,
+                    semesterId: data.semesterId || undefined,
+                    departmentName: data.departmentId ? departmentMap.get(data.departmentId) || 'N/A' : 'N/A',
+                    semesterName: data.semesterId ? semesterMap.get(data.semesterId) || 'N/A' : 'N/A',
                 };
             });
 
@@ -90,6 +111,21 @@ const ManageStudentsPage = () => {
             if (user) {
                 // Consider checking admin role here if needed
                 fetchStudents();
+                // Fetch departments for the dropdown
+                const loadDepartments = async () => {
+                    try {
+                        const deps = await getDepartments();
+                        // Ensure the departments have the correct structure
+                        const departmentsWithName = deps.map((dep: any) => ({
+                            id: dep.id,
+                            name: dep.name || 'Unknown Department'
+                        }));
+                        setDepartments(departmentsWithName);
+                    } catch (error) {
+                        console.error("Error loading departments:", error);
+                    }
+                };
+                loadDepartments();
             } else {
                 setListError("Authentication required.");
                 setLoadingStudents(false);
@@ -98,10 +134,46 @@ const ManageStudentsPage = () => {
         return () => unsubscribe();
     }, [fetchStudents]);
 
+    // Effect to load semesters when a department is selected
+    useEffect(() => {
+        const loadSemesters = async () => {
+            if (selectedDepartment) {
+                try {
+                    const sems = await getSemesters(selectedDepartment);
+                    // Ensure the semesters have the correct structure
+                    const semestersWithName = sems.map((sem: any) => ({
+                        id: sem.id,
+                        name: sem.name || 'Unknown Semester'
+                    }));
+                    setSemesters(semestersWithName);
+                    setSelectedSemester(''); // Reset semester when department changes
+                } catch (error) {
+                    console.error("Error loading semesters:", error);
+                    setSemesters([]);
+                }
+            } else {
+                setSemesters([]);
+                setSelectedSemester('');
+            }
+        };
+        loadSemesters();
+    }, [selectedDepartment]);
+
     // handleCreateStudent (ensure it calls fetchStudents on success)
     const handleCreateStudent = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         // ... (validation) ...
+        if (!selectedDepartment) {
+            setFormError("Please select a department for the student.");
+            setIsCreatingStudent(false);
+            return;
+        }
+        if (!selectedSemester) {
+            setFormError("Please select a semester for the student.");
+            setIsCreatingStudent(false);
+            return;
+        }
+
         setIsCreatingStudent(true);
         setFormError(null);
         setFormSuccess(null);
@@ -118,11 +190,14 @@ const ManageStudentsPage = () => {
                 {
                     name: studentName.trim(),
                     registrationNumber: studentRegNum.trim().toUpperCase(),
+                    departmentId: selectedDepartment,
+                    semesterId: selectedSemester,
                 }
             );
 
             setFormSuccess(`Student '${studentName.trim()}' created...`); // Shortened success msg
             setStudentName(''); setStudentRegNum(''); setStudentEmail(''); setStudentPassword('');
+            setSelectedDepartment(''); setSelectedSemester(''); // Clear dropdowns
 
             await fetchStudents(); // <<< REFRESH THE LIST HERE
 
@@ -168,6 +243,40 @@ const ManageStudentsPage = () => {
                          <div> <label htmlFor="studentName" className="block text-sm font-medium text-gray-700 mb-1"> Full Name <span className="text-red-500">*</span> </label> <input type="text" id="studentName" value={studentName} onChange={(e) => setStudentName(e.target.value)} required disabled={isCreatingStudent} className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:bg-gray-100"/> </div>
                          {/* Reg Num Input */}
                          <div> <label htmlFor="studentRegNum" className="block text-sm font-medium text-gray-700 mb-1"> Registration No. <span className="text-red-500">*</span> </label> <input type="text" id="studentRegNum" value={studentRegNum} onChange={(e) => setStudentRegNum(e.target.value)} required disabled={isCreatingStudent} className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:bg-gray-100"/> </div>
+                         {/* Department Dropdown */}
+                         <div>
+                             <label htmlFor="studentDepartment" className="block text-sm font-medium text-gray-700 mb-1"> Department <span className="text-red-500">*</span> </label>
+                             <select
+                                 id="studentDepartment"
+                                 value={selectedDepartment}
+                                 onChange={(e) => setSelectedDepartment(e.target.value)}
+                                 required
+                                 disabled={isCreatingStudent}
+                                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:bg-gray-100 bg-white"
+                             >
+                                 <option value="">Select Department</option>
+                                 {departments.map((dep) => (
+                                     <option key={dep.id} value={dep.id}>{dep.name}</option>
+                                 ))}
+                             </select>
+                         </div>
+                         {/* Semester Dropdown */}
+                         <div>
+                             <label htmlFor="studentSemester" className="block text-sm font-medium text-gray-700 mb-1"> Current Semester <span className="text-red-500">*</span> </label>
+                             <select
+                                 id="studentSemester"
+                                 value={selectedSemester}
+                                 onChange={(e) => setSelectedSemester(e.target.value)}
+                                 required
+                                 disabled={isCreatingStudent || !selectedDepartment} // Disable until department is selected
+                                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:bg-gray-100 bg-white"
+                             >
+                                 <option value="">Select Semester</option>
+                                 {semesters.map((sem) => (
+                                     <option key={sem.id} value={sem.id}>{sem.name}</option>
+                                 ))}
+                             </select>
+                         </div>
                      </div>
                       {/* Email Input */}
                       <div> <label htmlFor="studentEmail" className="block text-sm font-medium text-gray-700 mb-1"> Official Email <span className="text-red-500">*</span> </label> <input type="email" id="studentEmail" value={studentEmail} onChange={(e) => setStudentEmail(e.target.value)} required disabled={isCreatingStudent} placeholder="student@institution.edu" className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:bg-gray-100"/> </div>
@@ -202,13 +311,14 @@ const ManageStudentsPage = () => {
                      <div className="overflow-x-auto">
                          <table className="min-w-full divide-y divide-gray-200">
                              {/* ... Table Head ... */}
-                             <thead className="bg-gray-50"><tr><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registration No</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID (UID)</th></tr></thead>
+                             <thead className="bg-gray-50"><tr><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registration No</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Semester</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID (UID)</th></tr></thead>
                              <tbody className="bg-white divide-y divide-gray-200">
                                  {students.map((student) => (
                                      <tr key={student.id} className="hover:bg-gray-50">
                                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{student.name}</td>
                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.registrationNumber}</td>
-                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.email}</td>
+                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.departmentName}</td>
+                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.semesterName}</td>
                                          <td className="px-6 py-4 whitespace-nowrap text-gray-400 font-mono text-xs">{student.id}</td>
                                      </tr>
                                  ))}
