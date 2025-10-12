@@ -1,7 +1,5 @@
 # Zenith Product Roadmap
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/neslang-05/zenith)
-
 **Created by:** Nilambar Elangbam  
 **Created time:** March 1, 2025, 7:54 PM  
 **Category:** Customer Research, Proposal  
@@ -9,97 +7,280 @@
 **Last updated by:** Nilambar Elangbam  
 **Last updated time:** March 1, 2025, 11:35 PM  
 
-**Summary:**  
+**AI Summary:**  
 Zenith is a comprehensive result management system designed to automate academic result processing, enhance accessibility, and provide analytics for improved student performance. It targets school administrations, students, faculty, and parents.
 
 ---
 
-## Team Name: **Synergy**
+## 📧 Email Notifications
 
-*Representing collaborative teamwork*  
-***"Excellence Tracked, Potential Unlocked"***
+Zenith includes automated email notifications powered by Nodemailer.
 
-## Product Name: **Zenith**
+### Email Service Functions
 
-*The highest point reached by a celestial object, suggesting peak performance.*
+Located in `lib/emailService.ts`:
+
+#### 1. Welcome Emails
+```typescript
+sendWelcomeEmailToStudent(email, name, registrationNumber, tempPassword)
+sendWelcomeEmailToFaculty(email, name, facultyId, tempPassword)
+```
+
+#### 2. Result Notifications
+```typescript
+sendMarksPublishedEmail(email, studentName, semester, academicYear)
+```
+
+#### 3. Course Registration
+```typescript
+sendCourseRegistrationEmail(email, studentName, courses)
+```
+
+### Email Templates
+
+All email templates include:
+- ✅ Responsive HTML design
+- ✅ Institution branding
+- ✅ Clear call-to-action buttons
+- ✅ Professional formatting
+- ✅ Mobile-friendly layout
+
+### Configuration
+
+Set up email service in `.env.local`:
+
+```env
+EMAIL_USER=your_email@gmail.com
+EMAIL_PASSWORD=your_app_password  # Use App Password for Gmail
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+```
+
+**Gmail Setup:**
+1. Enable 2-Factor Authentication
+2. Generate App Password: [Google Account Settings](https://myaccount.google.com/apppasswords)
+3. Use App Password in `.env.local`
 
 ---
 
-## Design File
+## 🔒 Security Features
+
+### Authentication & Authorization
+
+- ✅ **Firebase Authentication** - Secure user authentication
+- ✅ **Role-Based Access Control** - Three-tier permission system
+- ✅ **Protected Routes** - Server-side route protection
+- ✅ **Session Management** - Secure session handling
+- ✅ **Password Hashing** - Firebase secure password storage
+
+### Data Security
+
+- ✅ **Firestore Security Rules** - Database-level access control
+- ✅ **Environment Variables** - Secure configuration management
+- ✅ **HTTPS Only** - Encrypted data transmission
+- ✅ **Input Validation** - Zod schema validation
+- ✅ **XSS Protection** - React built-in sanitization
+- ✅ **CSRF Protection** - Next.js built-in protection
+
+### Privacy
+
+- ✅ **Data Isolation** - Role-based data visibility
+- ✅ **Privacy Policy** - `/privacy` route
+- ✅ **Terms of Service** - `/terms` route
+- ✅ **User Consent** - GDPR compliant
+
+---
+
+## 🚀 Deployment
+
+### Deploy to Vercel (Recommended)
+
+1. **Push to GitHub**
+
+```bash
+git add .
+git commit -m "Ready for deployment"
+git push origin main
+```
+
+2. **Deploy on Vercel**
+
+   - Go to [Vercel](https://vercel.com/)
+   - Import your repository
+   - Add environment variables
+   - Deploy
+
+3. **Environment Variables**
+
+Add all variables from `.env.local` in Vercel dashboard:
+- Settings → Environment Variables
+- Add each `NEXT_PUBLIC_*` and `EMAIL_*` variable
+
+### Deploy to Other Platforms
+
+#### Netlify
+```bash
+npm run build
+# Deploy 'out' directory
+```
+
+#### Self-Hosted
+```bash
+npm run build
+npm run start
+# Use PM2 or similar process manager
+```
+
+### Post-Deployment Checklist
+
+- [ ] Environment variables configured
+- [ ] Firebase configuration verified
+- [ ] Email service tested
+- [ ] Security rules deployed
+- [ ] Domain configured (if custom domain)
+- [ ] SSL certificate enabled
+- [ ] Performance tested
+- [ ] Analytics configured (optional)
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions to Zenith! Here's how you can help:
+
+### Development Workflow
+
+1. **Fork the repository**
+
+2. **Create a feature branch**
+
+```bash
+git checkout -b feature/amazing-feature
+```
+
+3. **Make your changes**
+
+4. **Commit your changes**
+
+```bash
+git commit -m "Add some amazing feature"
+```
+
+5. **Push to the branch**
+
+```bash
+git push origin feature/amazing-feature
+```
+
+6. **Open a Pull Request**
+
+### Code Style
+
+- Follow TypeScript best practices
+- Use meaningful variable names
+- Comment complex logic
+- Keep components small and focused
+- Write clean, readable code
+
+### Testing
+
+- Test all new features thoroughly
+- Verify role-based access control
+- Check responsive design
+- Test email notifications
+
+---
+
+## 👨‍💻 Team
+
+### **Team Synergy**
+
+**Project Lead & Developer:**
+- **Nilambar Elangbam** - Full Stack Development
+
+**Reviewers:**
+- Nilambar Elangbam
+- Joymangol Chingangbam
+
+**Contact:**
+- GitHub: [@neslang-05](https://github.com/neslang-05)
+- Email: [Contact via GitHub](https://github.com/neslang-05)
+
+---
+
+## 🎨 Design Resources
+
+### Figma Design File
 
 [View Design on Figma](https://www.figma.com/design/MlupssNm2yDyenG7INdyYM/Zenith?node-id=3-2&t=eYq7NiU98FQ3NreT-1)
 
-## GitHub Repository
-
-[Zenith Repository](https://github.com/neslang-05/zenith.git)
-
----
-
-## What is a Result Management System?
-
-A software application designed to automate and streamline the process of managing academic results and student performance data.
+The Figma file includes:
+- Complete UI mockups
+- Component library
+- Design system
+- User flow diagrams
+- Responsive layouts
 
 ---
 
-## Problem Statement
+## 📝 License
 
-1. **Inefficiency and Human Error**  
-   Manual calculation and recording of grades is time-consuming and prone to errors, which can significantly impact students' academic records and future opportunities.
-
-2. **Limited Accessibility and Distribution**  
-   Traditional paper-based systems restrict when and how students can access their results, requiring physical presence and causing delays between assessment completion and result availability.
-
-3. **Data Management and Analysis Challenges**  
-   Physical record systems make it difficult to securely store, retrieve, and analyze academic data, limiting institutions' ability to track performance trends and make data-driven educational improvements.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## Solution
+## 🙏 Acknowledgments
 
-1. **Automated Calculation and Processing**  
-   Automatically calculates grades, percentages, GPAs, and pass/fail status based on input marks, ensuring accuracy and consistency in grading.
-
-2. **Centralized Digital Access**  
-   Provides a secure online platform for students and parents to access results anytime, while teachers and administrators manage data through role-based access controls.
-
-3. **Comprehensive Analytics and Reporting**  
-   Generates customizable reports and visualizations to track individual and class performance.
+- [Next.js](https://nextjs.org/) - The React framework
+- [Firebase](https://firebase.google.com/) - Backend infrastructure
+- [Vercel](https://vercel.com/) - Hosting platform
+- [Shadcn/ui](https://ui.shadcn.com/) - Component library
+- [Tailwind CSS](https://tailwindcss.com/) - Styling framework
+- [Radix UI](https://www.radix-ui.com/) - Unstyled components
 
 ---
 
-## Tech Stack
+## 📞 Support
 
-1. **Frontend**:  
-   - Framework: [Next.js](https://nextjs.org/) (React-based framework for server-side rendering and static site generation).  
-   - Styling: Tailwind CSS for utility-first styling.  
-   - State Management: Context API and custom hooks.  
-
-2. **Backend**:  
-   - Authentication: Firebase Authentication for secure user login and role-based access.  
-   - Database: Firestore (NoSQL database) for real-time data storage and retrieval.  
-   - Serverless Functions: Firebase Functions for CSV import and PDF generation.  
-
-3. **Utilities**:  
-   - Grade Calculation and CSV Parsing: Custom utility functions.  
-   - PDF Generation: Serverless function for generating result reports.  
-
-4. **Design**:  
-   - Figma for UI/UX design and prototyping.  
+For support, email us through GitHub or open an issue in the repository.
 
 ---
 
-## Database Design
+## 🗺 Roadmap
 
-The database is structured using Firestore (NoSQL) with the following collections:
+### Current Version (v0.1.0)
+- ✅ Basic authentication system
+- ✅ Admin dashboard
+- ✅ Student portal
+- ✅ Faculty interface
+- ✅ Result management
+- ✅ Email notifications
 
-1. **Users**:  
-   - Fields: `userId`, `name`, `email`, `role` (admin, faculty, student), `profileDetails`.  
+### Future Enhancements
+- [ ] Mobile app (React Native)
+- [ ] Advanced analytics with ML insights
+- [ ] Parent portal
+- [ ] Multi-language support
+- [ ] Attendance management
+- [ ] Fee management integration
+- [ ] Assignment submission portal
+- [ ] Real-time chat support
+- [ ] Push notifications
+- [ ] Offline mode support
+- [ ] Integration with LMS platforms
+- [ ] API for third-party integrations
 
-2. **Results**:  
-   - Fields: `resultId`, `studentId`, `subject`, `marks`, `grade`, `GPA`, `timestamp`.  
+---
 
-3. **Classes**:  
-   - Fields: `classId`, `className`, `facultyId`, `studentIds[]`.  
+<div align="center">
+  
+  ### Made with ❤️ by Team Synergy
+  
+  **Zenith** - *Excellence Tracked, Potential Unlocked*
+  
+  [⬆ Back to Top](#zenith---academic-result-management-system)
+  
+</div>  
 
 4. **Analytics**:  
    - Fields: `analyticsId`, `classId`, `performanceMetrics`, `trendData`.  
